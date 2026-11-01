@@ -1,0 +1,81 @@
+[
+ {
+  "chainId": "solana",
+  "dexId": "pumpswap",
+  "url": "https://dexscreener.com/solana/eej4zypgintcwrq4cvbdubqq7s45krm7xaefcu3uugb",
+  "pairAddress": "eEJ4ZYpgiNTCwRq4cVBdUbqq7s45KrM7XaEFcu3uuGb",
+  "baseToken": {
+   "address": "762ZqBCd5m2q3QJ5UPkFL5rqdEUeygNkfTZrpGEZpump",
+   "name": "PAWCAT",
+   "symbol": "PAWCAT"
+  },
+  "quoteToken": {
+   "address": "So11111111111111111111111111111111111111112",
+   "name": "Wrapped SOL",
+   "symbol": "SOL"
+  },
+  "priceNative": "0.00000002906",
+  "priceUsd": "0.000002726",
+  "txns": {
+   "m5": {
+    "buys": 0,
+    "sells": 0
+   },
+   "h1": {
+    "buys": 11,
+    "sells": 6
+   },
+   "h6": {
+    "buys": 68542,
+    "sells": 25490
+   },
+   "h24": {
+    "buys": 239372,
+    "sells": 107556
+   }
+  },
+  "volume": {
+   "h24": 6112248.75,
+   "h6": 1108978.37,
+   "h1": 92.1,
+   "m5": 0
+  },
+  "priceChange": {
+   "h1": -0.61,
+   "h6": -99.9,
+   "h24": -99.28
+  },
+  "liquidity": {
+   "usd": 3169.37,
+   "base": 878242833,
+   "quote": 8.2622
+  },
+  "fdv": 2710,
+  "marketCap": 2710,
+  "pairCreatedAt": 1793476461000,
+  "info": {
+   "imageUrl": "https://cdn.dexscreener.com/cms/images/orbtChFd_f47QHon?width=800&height=800&quality=95&format=auto",
+   "header": "https://cdn.dexscreener.com/cms/images/2mA1fI-6WMSbBGiu?width=1500&height=500&quality=95&format=auto",
+   "openGraph": "https://cdn.dexscreener.com/token-images/og/solana/762ZqBCd5m2q3QJ5UPkFL5rqdEUeygNkfTZrpGEZpump?timestamp=1793565300000",
+   "websites": [
+    {
+     "url": "https://www.pawcat.site",
+     "label": "Website"
+    }
+   ],
+   "socials": [
+    {
+     "url": "https://x.com/solpawcat",
+     "type": "twitter"
+    },
+    {
+     "url": "https://t.me/solpawcat",
+     "type": "telegram"
+    }
+   ]
+  },
+  "boosts": {
+   "active": 100
+  }
+ }
+]

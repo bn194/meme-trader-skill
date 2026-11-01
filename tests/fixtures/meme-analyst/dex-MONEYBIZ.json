@@ -1,0 +1,62 @@
+[
+ {
+  "chainId": "solana",
+  "dexId": "meteora",
+  "url": "https://dexscreener.com/solana/8ajaxrof7cwfo8egynnyoqzqt7phmxkbbw4sshj6pxj2",
+  "pairAddress": "8aJaxRoF7CwFo8EgynnyoqZqT7PhmxkBBW4ssHJ6PXj2",
+  "labels": [
+   "DYN2"
+  ],
+  "baseToken": {
+   "address": "D3YBbpwUAENRYkKW7H4crp67icXazkZFb2UajoW31yoi",
+   "name": "Money Business",
+   "symbol": "MONEYBIZ"
+  },
+  "quoteToken": {
+   "address": "So11111111111111111111111111111111111111112",
+   "name": "Wrapped SOL",
+   "symbol": "SOL"
+  },
+  "priceNative": "0.000000001127",
+  "priceUsd": "0.0000001068",
+  "txns": {
+   "m5": {
+    "buys": 0,
+    "sells": 0
+   },
+   "h1": {
+    "buys": 0,
+    "sells": 0
+   },
+   "h6": {
+    "buys": 5,
+    "sells": 4
+   },
+   "h24": {
+    "buys": 6,
+    "sells": 13
+   }
+  },
+  "volume": {
+   "h24": 45.91,
+   "h6": 32.97,
+   "h1": 0,
+   "m5": 0
+  },
+  "priceChange": {
+   "h6": -1.6,
+   "h24": 29.41
+  },
+  "liquidity": {
+   "usd": 106.97,
+   "base": 505288833,
+   "quote": 0.5596
+  },
+  "fdv": 106,
+  "marketCap": 106,
+  "pairCreatedAt": 1792786368000,
+  "boosts": {
+   "active": 10
+  }
+ }
+]

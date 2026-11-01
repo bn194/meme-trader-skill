@@ -1,0 +1,84 @@
+[
+ {
+  "chainId": "solana",
+  "dexId": "raydium",
+  "url": "https://dexscreener.com/solana/9vgtxavb3pnzictnneb47uat2tsyynrrtrimnukjoch4",
+  "pairAddress": "9vGtXAVB3pNzictnNEb47UAT2tsYyNrrTriMNUkJocH4",
+  "labels": [
+   "CPMM"
+  ],
+  "baseToken": {
+   "address": "CjQ494q5yYfbHMoEpXdbi6mrS5sd3Norx8VEDUwgkXZR",
+   "name": "GTA 6 VICE CITY",
+   "symbol": "VICE"
+  },
+  "quoteToken": {
+   "address": "So11111111111111111111111111111111111111112",
+   "name": "Wrapped SOL",
+   "symbol": "SOL"
+  },
+  "priceNative": "0.0000002599",
+  "priceUsd": "0.00002436",
+  "txns": {
+   "m5": {
+    "buys": 0,
+    "sells": 0
+   },
+   "h1": {
+    "buys": 6,
+    "sells": 15
+   },
+   "h6": {
+    "buys": 63,
+    "sells": 57
+   },
+   "h24": {
+    "buys": 150,
+    "sells": 164
+   }
+  },
+  "volume": {
+   "h24": 12726.42,
+   "h6": 4030.15,
+   "h1": 538.97,
+   "m5": 0
+  },
+  "priceChange": {
+   "h1": 4.42,
+   "h6": 3.81,
+   "h24": -37.84
+  },
+  "liquidity": {
+   "usd": 12709.01,
+   "base": 260828533,
+   "quote": 67.8103
+  },
+  "fdv": 24363,
+  "marketCap": 24363,
+  "pairCreatedAt": 1793512548000,
+  "info": {
+   "imageUrl": "https://cdn.dexscreener.com/cms/images/uTrCKuUZ8ELx5O6V?width=800&height=800&quality=95&format=auto",
+   "header": "https://cdn.dexscreener.com/cms/images/mjfSvgLC8XQZezLT?width=1500&height=500&quality=95&format=auto",
+   "openGraph": "https://cdn.dexscreener.com/token-images/og/solana/CjQ494q5yYfbHMoEpXdbi6mrS5sd3Norx8VEDUwgkXZR?timestamp=1793565300000",
+   "websites": [
+    {
+     "url": "https://www.vicecitysol.io/#token",
+     "label": "Website"
+    }
+   ],
+   "socials": [
+    {
+     "url": "https://x.com/vicecitysoll?s=11",
+     "type": "twitter"
+    },
+    {
+     "url": "https://t.me/gta6vicecitychat",
+     "type": "telegram"
+    }
+   ]
+  },
+  "boosts": {
+   "active": 30
+  }
+ }
+]

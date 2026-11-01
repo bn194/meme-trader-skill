@@ -1,0 +1,6 @@
+{
+  "wallets": [
+    {"address": "5MVneCfDge5vtf4C7QZmczCJbBB8vfvDbMqvopvkBLJm", "label": "GATO dev", "role": "dev", "token": "HsprHxBRgiVaQdRf3TnKNuZZtaX9JUSPgMFdAkk6pump"},
+    {"address": "8gHMH4VqW9Vwk5Z8NbJWa5nup4Wx4exxcR8f8ALCzsxo", "label": "GATO #2 holder", "role": "whale"}
+  ]
+}

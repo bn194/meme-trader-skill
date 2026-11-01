@@ -1,0 +1,8 @@
+{
+  "alerts": [
+    {"token": "HsprHxBRgiVaQdRf3TnKNuZZtaX9JUSPgMFdAkk6pump", "symbol": "GATO", "chain": "solana", "kind": "stop", "level": 0.007456},
+    {"token": "HsprHxBRgiVaQdRf3TnKNuZZtaX9JUSPgMFdAkk6pump", "symbol": "GATO", "chain": "solana", "kind": "target", "level": 0.0087878},
+    {"token": "HsprHxBRgiVaQdRf3TnKNuZZtaX9JUSPgMFdAkk6pump", "symbol": "GATO", "chain": "solana", "kind": "time", "at": 1793570280},
+    {"token": "HsprHxBRgiVaQdRf3TnKNuZZtaX9JUSPgMFdAkk6pump", "symbol": "GATO", "chain": "solana", "kind": "liq_drop", "pct": 30, "base": 278503.92}
+  ]
+}

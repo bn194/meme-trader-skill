@@ -1,0 +1,78 @@
+[
+ {
+  "chainId": "solana",
+  "dexId": "pumpswap",
+  "url": "https://dexscreener.com/solana/g2uurbmvdzdfp4qyobjrskbxsi7d6v4bpp9thps36y4b",
+  "pairAddress": "G2UuRbmVDzDFP4qyoBJrSKBXSi7d6V4bPP9tHPs36y4b",
+  "baseToken": {
+   "address": "nxPqZ4F7ux8Vph5NFu25rEP6Kx9Gr1U6Fmj36Rjpump",
+   "name": "Dacity Coin",
+   "symbol": "Dacity"
+  },
+  "quoteToken": {
+   "address": "TTWofwAge91oFhZs7kpQdyrVRkmevgM88xijGvQFbKo",
+   "name": "Take-Two Interactive Software - Backpack Securities",
+   "symbol": "TTWO"
+  },
+  "priceNative": "0.00003932",
+  "priceUsd": "0.007607",
+  "txns": {
+   "m5": {
+    "buys": 37,
+    "sells": 15
+   },
+   "h1": {
+    "buys": 534,
+    "sells": 384
+   },
+   "h6": {
+    "buys": 3292,
+    "sells": 1819
+   },
+   "h24": {
+    "buys": 6899,
+    "sells": 4075
+   }
+  },
+  "volume": {
+   "h24": 1121002.88,
+   "h6": 535777.42,
+   "h1": 86220.65,
+   "m5": 5626.91
+  },
+  "priceChange": {
+   "m5": -0.65,
+   "h1": 2.92,
+   "h6": -5.39,
+   "h24": -13.6
+  },
+  "liquidity": {
+   "usd": 373056.71,
+   "base": 24681697,
+   "quote": 957.811
+  },
+  "fdv": 7468090,
+  "marketCap": 7468090,
+  "pairCreatedAt": 1791717419000,
+  "info": {
+   "imageUrl": "https://cdn.dexscreener.com/cms/images/J9vFU4NzZG9CNbM5?width=800&height=800&quality=95&format=auto",
+   "header": "https://cdn.dexscreener.com/cms/images/trtB6up4yHPTQLfJ?width=1500&height=500&quality=95&format=auto",
+   "openGraph": "https://cdn.dexscreener.com/token-images/og/solana/nxPqZ4F7ux8Vph5NFu25rEP6Kx9Gr1U6Fmj36Rjpump?timestamp=1793565300000",
+   "websites": [
+    {
+     "url": "https://finance.yahoo.com/markets/crypto/articles/gta-6-trailer-features-dacity-131604628.html",
+     "label": "Website"
+    }
+   ],
+   "socials": [
+    {
+     "url": "https://x.com/dacity_gta6",
+     "type": "twitter"
+    }
+   ]
+  },
+  "boosts": {
+   "active": 500
+  }
+ }
+]

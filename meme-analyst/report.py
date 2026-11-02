@@ -39,11 +39,13 @@ ZERO = ("0x0000000000000000000000000000000000000000", "0x00000000000000000000000
 # Uniswap v4 keeps every pool's tokens in one PoolManager contract per chain: a pool, not a whale
 POOL_MANAGERS = ("0x000000000004444c5dc75cb358380d2e3de08a90", "0x498581ff718922c3f8e6a244956af099b2652b2b",
                  "0x28e2ea090877bf75740558f6bfb36a5ffee9e9df")
-POOL_TYPES = ("AMM", "LOCKER", "POOL", "BURN")  # RugCheck knownAccounts types that are not people
+POOL_TYPES = ("AMM", "CLOB", "LOCKER", "POOL", "BURN")  # RugCheck knownAccounts types that are not people
 DEFAULTS = {"min_liquidity_usd": 50000, "min_pool_age_hours": 6, "min_holders": 1000,
             "max_top10_pct": 30, "max_single_holder_pct": 10, "max_creator_pct": 5,
             "max_insider_pct": 15, "max_turnover": 50, "min_lp_locked_pct": 90,
+            "lookalike_caution": 6, "lookalike_avoid": 10, "locked_caution_pct": 15, "max_locked_pct": 50,
             "timezone": "Europe/Berlin"}
+LOOKALIKE_BAND = 0.05  # holders whose amounts lie within 5 % of each other look alike
 
 
 class AnalystError(Exception):
@@ -249,11 +251,16 @@ def goplus_flags(chain, g, c, flag, pools=()):
         if locked < float(c["min_lp_locked_pct"]):
             flag("avoid", "lp_unlocked", "GoPlus: only %.0f%% of the LP is locked or burned: the liquidity can be pulled" % locked)
     skip = set(a.lower() for a in pools) | set(POOL_MANAGERS) | set(ZERO)
-    holders = [h for h in (g.get("holders") or []) if (h.get("address") or "").lower() not in skip and not _on(h.get("is_locked"))]
+    every = g.get("holders") or []
+    holders = [h for h in every if (h.get("address") or "").lower() not in skip and not _on(h.get("is_locked"))]
     top10 = sum(float(h.get("percent") or 0) * 100 for h in holders[:10])
     gm["top10_pct"] = round(top10, 2)
     if top10 > float(c["max_top10_pct"]):
         flag("avoid", "top10", "GoPlus: the top 10 wallets hold %.1f%%" % top10)
+    gm.update(lookalike_flag(flag, c, [float(h.get("percent") or 0) * 100 for h in holders], "GoPlus: "))
+    locked = sum(float(h.get("percent") or 0) * 100 for h in every
+                 if _on(h.get("is_locked")) and (h.get("address") or "").lower() not in skip)
+    gm.update(locked_flag(flag, c, locked, "locked holders", "GoPlus: "))
     creator = float(g.get("creator_percent") or 0) * 100
     gm["creator_pct"] = round(creator, 2)
     if creator > float(c["max_creator_pct"]):
@@ -261,6 +268,49 @@ def goplus_flags(chain, g, c, flag, pools=()):
     if gm.get("holders") is not None and gm["holders"] < int(c["min_holders"]):
         flag("caution", "holders", "%s holders, under your %s minimum" % (gm["holders"], c["min_holders"]))
     return gm
+
+
+def lookalikes(pcts, band=LOOKALIKE_BAND):
+    """The biggest group of holders whose amounts lie within 5 % of each other.
+
+    One buyer who splits a bag across many fresh wallets leaves this mark: ten or twenty wallets with
+    nearly the same amount. Real holders spread out (each rank holds visibly less than the one above).
+    -> (count, smallest pct, largest pct, pct together)."""
+    vals = sorted((float(p) for p in pcts if p and float(p) > 0), reverse=True)
+    best = (0, 0.0, 0.0, 0.0)
+    for i, hi in enumerate(vals):
+        grp = [v for v in vals[i:] if v >= hi * (1 - band)]
+        if len(grp) > best[0]:
+            best = (len(grp), grp[-1], hi, sum(grp))
+    return best
+
+
+def _share(v):
+    return ("%.2f" % v) if v >= 0.1 else ("%.3f" % v)
+
+
+def lookalike_flag(flag, c, pcts, prefix=""):
+    """Flag a bundle hidden across look-alike wallets in the top 20 holders. -> metrics."""
+    top = list(pcts)[:20]
+    n, lo, hi, tot = lookalikes(top)
+    if n >= int(c["lookalike_avoid"]) or n >= int(c["lookalike_caution"]):
+        level = "avoid" if n >= int(c["lookalike_avoid"]) else "caution"
+        flag(level, "bundle", "%s%d of the top %d wallets hold almost the same amount (%s to %s%% each, %.1f%% "
+             "together): %s one buyer split across many wallets (a bundle), which hides how much one hand "
+             "really holds, so the top-10 figure understates it" % (
+                 prefix, n, len(top), _share(lo), _share(hi), tot,
+                 "that is" if level == "avoid" else "often"))
+    return {"lookalike_wallets": n, "lookalike_pct": round(tot, 2)}
+
+
+def locked_flag(flag, c, locked, where, prefix=""):
+    """Flag supply sitting in lock or vesting contracts: it is not trading now and can be sold when it unlocks."""
+    if locked > float(c["max_locked_pct"]) or locked > float(c["locked_caution_pct"]):
+        level = "avoid" if locked > float(c["max_locked_pct"]) else "caution"
+        flag(level, "locked_supply", "%s%.1f%% of the supply sits in lock contracts (%s): only the rest trades now, "
+             "and whoever gets those tokens when they unlock can sell them into the pool. Check the unlock "
+             "dates before you buy" % (prefix, locked, where))
+    return {"locked_pct": round(locked, 2)}
 
 
 def holder_trend(history, now, holders):
@@ -346,6 +396,9 @@ def analyze(chain, address, pairs, rc, cfg, now, gp=None, holder_history=None):
                   and h.get("owner") not in pool_owners and h.get("address") not in pool_owners]
         top10 = sum(_num(h.get("pct"), 0.0) for h in people[:10])
         largest = max([_num(h.get("pct"), 0.0) for h in people] or [0.0])
+        lockers = [h for h in holders if (known.get(h.get("owner")) or {}).get("type") == "LOCKER"]
+        locked = sum(_num(h.get("pct"), 0.0) for h in lockers)
+        locker_names = sorted({(known.get(h.get("owner")) or {}).get("name") or "a lock contract" for h in lockers})
         creator = rc.get("creator")
         creator_pct = (_num(rc.get("creatorBalance"), 0.0) / supply * 100.0) if supply else 0.0
         for h in holders:
@@ -409,6 +462,8 @@ def analyze(chain, address, pairs, rc, cfg, now, gp=None, holder_history=None):
                  "can dump on you" % (top10, c["max_top10_pct"]))
         if largest > c["max_single_holder_pct"]:
             flag("avoid", "whale", "one wallet holds %.1f%% of the supply (your limit %s%%)" % (largest, c["max_single_holder_pct"]))
+        rcm.update(lookalike_flag(flag, c, [_num(h.get("pct"), 0.0) for h in people]))
+        rcm.update(locked_flag(flag, c, locked, ", ".join(locker_names)))
         if creator_pct > c["max_creator_pct"]:
             flag("avoid", "creator", "the creator still holds %.1f%% (your limit %s%%)" % (creator_pct, c["max_creator_pct"]))
         elif creator_pct > 0:
@@ -517,6 +572,9 @@ def render(rep, tz):
             out.append("  creator          %.2f%%   insiders %.2f%% in %d networks" % (m["creator_pct"], m["insider_pct"], m["insider_networks"]))
         elif m.get("top10_pct") is not None:
             out.append("  top 10           %.1f%%, creator %.2f%%" % (m["top10_pct"], m.get("creator_pct") or 0))
+        if m.get("lookalike_wallets") is not None or m.get("locked_pct") is not None:
+            out.append("  look-alikes      %s wallets with nearly the same amount   locked %.1f%% in lock contracts" % (
+                m.get("lookalike_wallets") or 0, m.get("locked_pct") or 0))
     out.append("Trading")
     pc = m.get("price_change") or {}
     out.append("  market cap       $%s   24h volume $%s (%sx liquidity)" % (_k(m.get("market_cap")), _k(m.get("volume_h24")),

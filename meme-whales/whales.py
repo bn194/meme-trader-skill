@@ -237,6 +237,21 @@ def mine():
     return held, watched
 
 
+def signed_by(account_keys, wallet):
+    """Did the wallet sign this transaction itself? jsonParsed keys say so; plain keys cannot, so assume yes.
+
+    A transfer the wallet did not sign was made by a program or by someone else: a fee payout, an
+    airdrop, a spam token. That is not the wallet trading."""
+    if not any(isinstance(k, dict) and "signer" in k for k in account_keys):
+        return True
+    return any(isinstance(k, dict) and k.get("pubkey") == wallet and k.get("signer") for k in account_keys)
+
+
+def quiet(r):
+    """A transfer the wallet did not sign, in a coin you neither hold nor watch: noise, summed up in one line."""
+    return r.get("signed") is False and r["action"] in ("RECEIVED", "SENT") and not r["flags"]
+
+
 def check(chain, wallets, state, limit, tz, window=1800):
     nm = names()
     held, watched = mine()
@@ -260,12 +275,17 @@ def check(chain, wallets, state, limit, tz, window=1800):
             if not tx:
                 continue
             toks, sol = deltas(tx, addr)
-            keys = [k["pubkey"] if isinstance(k, dict) else k for k in ((tx.get("transaction") or {}).get("message") or {}).get("accountKeys") or []]
+            raw = ((tx.get("transaction") or {}).get("message") or {}).get("accountKeys") or []
+            keys = [k["pubkey"] if isinstance(k, dict) else k for k in raw]
             fee = ((tx.get("meta") or {}).get("fee") or 0) / 1e9 if keys and keys[0] == addr else 0.0
+            signed = signed_by(raw, addr)
             for act, mint, amt, paid, stable in classify(toks, sol, fee):
                 flags = []
                 if w.get("role") == "dev" and act in ("SELL", "SENT") and (not w.get("token") or w.get("token") == mint):
-                    flags.append("DEV %s: the creator is moving out of its own coin" % ("SOLD" if act == "SELL" else "MOVED TOKENS"))
+                    flags.append("DEV %s: %s" % ("SOLD" if act == "SELL" else "MOVED TOKENS",
+                                                 "the creator is moving out of its own coin" if w.get("token") else
+                                                 "a dev wallet is moving tokens out (no coin set for it: whales.py dev "
+                                                 "MINT rings only for its own coin)"))
                 if mint in held:
                     flags.append("you hold it")
                 elif mint in watched:
@@ -274,7 +294,7 @@ def check(chain, wallets, state, limit, tz, window=1800):
                                "role": w.get("role"), "action": act, "mint": mint, "symbol": nm.get(mint),
                                "amount": amt, "sol": round(paid, 6), "stable": stable,
                                "usd": round(abs(paid) * sol_px, 2) if sol_px and abs(paid) > 0.001 else None,
-                               "signature": sig, "flags": flags})
+                               "signature": sig, "signed": signed, "flags": flags})
     state["seen"] = state["seen"][-5000:]
     clusters = find_clusters(alerts, state, window)
     alerts.sort(key=lambda r: (-(1 if any(f.startswith("DEV") for f in r["flags"]) else 0), -(r["time"] or 0)))
@@ -316,7 +336,10 @@ def render(alerts, tz, n_wallets, clusters=()):
         out.append("Nothing new from %d wallet%s." % (n_wallets, "" if n_wallets == 1 else "s"))
         return "\n".join(out)
     out.append("%d new from %d wallet%s, newest first (dev alerts on top):" % (len(alerts), n_wallets, "" if n_wallets == 1 else "s"))
+    hush = [r for r in alerts if quiet(r)]
     for r in alerts:
+        if quiet(r):
+            continue
         amt = "{:,.2f}".format(abs(r["amount"]))
         coin = r["symbol"] or (r["mint"][:6] + "..")
         money = ""
@@ -327,6 +350,13 @@ def render(alerts, tz, n_wallets, clusters=()):
         out.append("      %s  tx %s..%s" % (r["mint"], r["signature"][:8], r["signature"][-6:]))
         for f in r["flags"]:
             out.append("      ! %s" % f)
+        if r.get("signed") is False:
+            out.append("      not signed by this wallet: a program or someone else moved it")
+    if hush:
+        coins = sorted(set(r["symbol"] or (r["mint"][:6] + "..") for r in hush))
+        out.append("  + %d transfer%s of %s that the wallet did not sign itself (a program paid out or moved them: fee "
+                   "payouts, airdrops, spam tokens): not trades, so not listed. --json shows them." % (
+                       len(hush), "" if len(hush) == 1 else "s", ", ".join(coins)))
     out.append("Public on-chain data. A whale's trade is information, not a signal to copy: they can afford losses you cannot.")
     return "\n".join(out)
 

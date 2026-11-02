@@ -5,13 +5,14 @@ import unittest
 
 from _load import ROOT
 
-SKILLS = ["meme-scanner", "meme-news", "meme-entry", "meme-exit", "meme-timemachine", "meme-risk", "meme-budget",
-          "meme-broker", "meme-alerts", "meme-analyst", "meme-whales"]
-ABOUT = ("11 Claude skills for meme coin trading: scan the coins in play, rug-check every one, time every entry "
-         "and exit, and replay every outcome after fees before you risk a dollar.")
+SKILLS = ["meme-scanner", "meme-radar", "meme-news", "meme-entry", "meme-exit", "meme-timemachine", "meme-risk",
+          "meme-budget", "meme-broker", "meme-alerts", "meme-analyst", "meme-whales", "meme-journal"]
+ABOUT = ("13 Claude skills for meme coin trading: scan the coins in play, catch new launches the second they go live, "
+         "rug-check every one, time every entry and exit, replay every outcome after fees before you risk a dollar, "
+         "and keep an honest journal of the real trades.")
 # skills on the way to a trade carry the full safety block
-ORDER_PATH = ["meme-scanner", "meme-entry", "meme-exit", "meme-timemachine", "meme-budget", "meme-risk",
-              "meme-broker", "meme-alerts", "meme-whales"]
+ORDER_PATH = ["meme-scanner", "meme-radar", "meme-entry", "meme-exit", "meme-timemachine", "meme-budget", "meme-risk",
+              "meme-broker", "meme-alerts", "meme-whales", "meme-journal"]
 
 
 def frontmatter(path):
@@ -30,7 +31,7 @@ def every_text_file():
 
 
 class Repo(unittest.TestCase):
-    def test_eleven_skill_folders_at_the_root(self):
+    def test_thirteen_skill_folders_at_the_root(self):
         found = sorted(d for d in os.listdir(ROOT) if os.path.isfile(os.path.join(ROOT, d, "SKILL.md")))
         self.assertEqual(found, sorted(SKILLS))
 
@@ -90,9 +91,9 @@ class Repo(unittest.TestCase):
         for line in (ABOUT, "/plugin marketplace add bn194/meme-trader-skill",
                      "/plugin install meme-trader-skill@meme-trader-skill", "## Kleingedrucktes",
                      "Keine Finanzberatung", "python3 -m unittest discover -s tests -v"):
-            self.assertIn(line, readme)
+            self.assertTrue(line in readme, "README misses: %s" % line)
         for s in SKILLS:
-            self.assertIn("/" + s, readme, s)
+            self.assertTrue("/" + s in readme, s)
 
     def test_no_em_dashes_and_no_keys(self):
         for path in every_text_file():
@@ -136,6 +137,12 @@ class Repo(unittest.TestCase):
         self.assertIs(cfg["allow_perps"], False)
         self.assertIs(cfg["allow_short"], False)
         self.assertLessEqual(cfg["max_loss_per_trade_usd"], cfg["budget_usd"] * 0.05)
+        self.assertLessEqual(cfg["testphase_max_order_usd"], cfg["max_order_usd"])
+        self.assertEqual(cfg["testphase_trades"], 20)
+        self.assertEqual(cfg["currency"], "EUR")
+        self.assertIn(cfg["venue"], cfg["venues"])
+        for v in cfg["venues"].values():
+            self.assertTrue(v["note"])
 
     def test_no_tool_handles_keys_or_signs(self):
         for s in SKILLS:

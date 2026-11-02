@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "meme-trader-skill",
-      "description": "Eleven Claude skills for meme coin trading: a coin scanner, a rug-check analyst, a news monitor, an entry timer, an exit planner that counts the fees, a time machine that replays 10,000 next hours, a risk manager, a budget manager, an order executor (paper by default, never without your yes, never touches a wallet), price and rug alerts, and a whale and dev wallet tracker.",
+      "description": "Thirteen Claude skills for meme coin trading: a coin scanner sorted by edge, a launch radar for new pump.fun coins and graduations, a rug-check analyst (RugCheck and GoPlus, Solana, Base and BSC), a news monitor with public Telegram channels, an entry timer, an exit planner that counts the fees of your app, a time machine that replays 10,000 next hours and backtests many coins, a risk manager with a test phase, a budget manager in euros, an order executor that never touches a wallet, price and rug alerts, a whale and dev wallet tracker, and a trade journal.",
       "source": "./",
       "category": "productivity",
       "homepage": "https://github.com/bn194/meme-trader-skill"

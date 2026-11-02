@@ -15,7 +15,8 @@ NOW = "2026-11-01 21:58"
 def analyst():
     d = os.path.join(FIX, "meme-analyst")
     return run(A, [GATO, "--offline-dex", os.path.join(d, "dex-GATO-2158.json"),
-                   "--offline-rugcheck", os.path.join(d, "rugcheck-GATO-2158.json"), "--now", NOW, "--write"])
+                   "--offline-rugcheck", os.path.join(d, "rugcheck-GATO-2158.json"),
+                   "--offline-goplus", os.path.join(d, "goplus-GATO.json"), "--now", NOW, "--write"])
 
 
 def plan():
@@ -29,7 +30,7 @@ def timemachine(replays="10000"):
 
 def budget(extra=()):
     return run(B, ["--now", NOW, "--sol-price", "94.2023", "--roundtrip", "1.213", "--roundtrip-usd", "254.35",
-                   "--write"] + list(extra))
+                   "--eur-usd", "1.1132", "--write"] + list(extra))
 
 
 def all_steps(replays="10000"):

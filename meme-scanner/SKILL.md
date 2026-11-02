@@ -8,8 +8,10 @@ description: >-
   young or washed by bots, and tags setups from the pool stats (momentum,
   volume surge, dip in an uptrend, new pool). Then a 1-minute range breakout
   scan: which charts just CLOSED above the high of the 15 minutes before, on
-  rising volume. Writes meme/watchlist.json for meme-analyst, meme-news and
-  meme-entry. Free data, no key. Use when the user says "scan meme coins",
+  rising volume. With --edge it replays that breakout rule on each hit's own
+  last days, after your app's costs, and sorts by it. Writes
+  meme/watchlist.json for meme-analyst, meme-news and meme-entry. Free
+  data, no key. Use when the user says "scan meme coins",
   "what is pumping", "find me setups", "what is breaking out on Solana",
   "trending on DexScreener", "was pumpt gerade", "scanne meme coins",
   "finde mir coins", "build my watchlist", or at the start of a session
@@ -34,6 +36,7 @@ python3 "${CLAUDE_SKILL_DIR}/scan.py" pairs                       # pool stats +
 python3 "${CLAUDE_SKILL_DIR}/scan.py" range                       # 1-minute breakouts -> meme/watchlist.json
 python3 "${CLAUDE_SKILL_DIR}/scan.py" range --tokens MINT1,MINT2  # your own list
 python3 "${CLAUDE_SKILL_DIR}/scan.py" pairs --setup momentum --json
+python3 "${CLAUDE_SKILL_DIR}/scan.py" range --edge               # sort the hits by the rule's own past, after costs
 ```
 
 Flags: `--chains solana` (default from `meme/config.json`), `--min-liquidity`
@@ -94,14 +97,25 @@ missing minute is skipped (no trades in a minute means a thin coin). A bar
 counts only once it is complete. `--max-confirm` caps how many charts it
 reads (most traded first) and says PARTIAL when it skipped some.
 
+## Edge: has this worked on this coin?
+
+`--edge` (range or pairs, the first `--edge-max` 10 hits) loads the 1-minute
+bars of each hit's last 3 days and replays the default breakout rule on them
+(15-minute range, range-low stop, 3R, 60-minute time stop) with your app's
+round-trip costs, through meme-timemachine (it must sit next to this skill).
+Each hit gets `edge: +0.12R after costs over 9 past breakouts (2.9 days)`,
+and LOST MONEY when it was negative. The list is sorted by it. A positive
+edge on 5 past trades is still mostly luck; `/meme-timemachine compare` and
+`multi` check it properly.
+
 ## Steps
 
 1. `scan.py pairs` (it builds the universe if it is missing or old). Tell
    the user the counts (universe, with a pool, passed, washed, hits) and the
    top few with their setups.
-2. `scan.py range`. Tell the user which coins just broke out, when, by how
-   much, on what volume, and the price now. A hit from 9 minutes ago is not
-   the price now.
+2. `scan.py range --edge`. Tell the user which coins just broke out, when, by
+   how much, on what volume, the price now, and each one's edge. A hit from
+   9 minutes ago is not the price now. Coins with LOST MONEY go last: say it.
 3. The user picks one coin. Hand it on: `/meme-analyst MINT` (is it a rug?)
    first, always, then `/meme-news` and `/meme-entry`. Never pick for them.
 4. Always say the contract address, never only the ticker: tickers are not
@@ -134,6 +148,8 @@ Range scan at Sun 2026-11-01 21:58 (Europe/Berlin), 1-minute bars:
 
 GATO (GTA6CAT, a pump.fun coin now on PumpSwap, $278k pool) broke its
 21:42 to 21:57 range on the 21:57 bar, 0.90 % over the high on 2.7x volume.
+With `--edge` on the bars saved that evening it adds `edge: -0.89R after
+costs over 8 past breakouts (0.7 days)  LOST MONEY`.
 It matched no pairs setup (more sells than buys in the hour), which is fine:
 the two scans ask different questions. The user picks GATO and Claude hands
 it to `/meme-analyst HsprHxBRgiVaQdRf3TnKNuZZtaX9JUSPgMFdAkk6pump`.

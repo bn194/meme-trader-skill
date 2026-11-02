@@ -213,6 +213,8 @@ def resolve(token, chain, offline):
             known.append(d)
     wl = load(os.path.join(base, "watchlist.json"), {}) or {}
     known.extend(wl.get("hits", []))
+    for addr, row in (load(os.path.join(base, "safety.json"), {}) or {}).items():
+        known.append({"address": addr, "symbol": row.get("symbol"), "chain": row.get("chain", chain), "pair": row.get("pair")})
     for k in known:
         if k.get("address") == t or str(k.get("symbol", "")).upper() == t.lstrip("$").upper():
             return {"chain": k.get("chain", chain), "address": k["address"], "symbol": k.get("symbol"),

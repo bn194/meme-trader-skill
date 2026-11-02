@@ -35,14 +35,24 @@ from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
 
 UA = "meme-trader-skill/1.0 (+https://github.com/bn194/meme-trader-skill)"
 JUP_CHART = "https://datapi.jup.ag/v2/charts/%s?interval=1_MINUTE&to=%d&candles=%d&type=price"
-DEFAULTS = {"timezone": "Europe/Berlin", "fee_pct": 0.5, "fee_min_usd": 0.95, "slippage_pct": 0.3,
-            "pool_fee_pct": 0.5, "max_hold_minutes": 60, "min_reward_risk": 1.0, "venue": "fomo"}
+DEFAULTS = {"timezone": "Europe/Berlin", "fee_pct": 0.85, "fee_min_usd": 0, "slippage_pct": 0.3,
+            "pool_fee_pct": 0.5, "max_hold_minutes": 60, "min_reward_risk": 1.0, "venue": "phantom"}
 VENUES = {"fomo": "Fomo", "phantom": "Phantom", "jupiter": "Jupiter", "axiom": "Axiom", "photon": "Photon",
           "bullx": "BullX", "pumpfun": "pump.fun", "solflare": "Solflare", "trojan": "Trojan"}
 
 
 class PlanError(Exception):
     pass
+
+def apply_venue(cfg):
+    """The venue's fee profile (config "venues") wins over the plain fee_pct and fee_min_usd."""
+    v = (cfg.get("venues") or {}).get(str(cfg.get("venue", "")).lower())
+    if v:
+        cfg = dict(cfg)
+        cfg["fee_pct"] = float(v.get("fee_pct", cfg.get("fee_pct", 0.85)))
+        cfg["fee_min_usd"] = float(v.get("fee_min_usd") or 0)
+    return cfg
+
 
 
 # ---------------------------------------------------------------- files and time
@@ -190,7 +200,7 @@ def get_json(url):
 
 # ---------------------------------------------------------------- the plan
 
-def make_plan(entry, cfg, stop_rule="range-low", target_rule="3R", max_hold=None, bars=None):
+def make_plan(entry, cfg, stop_rule="range-low", target_rule="3R", max_hold=None, bars=None, exits=None):
     """Pure: entry (meme/entry.json shape, triggered) + the rules -> the plan dict. Raises PlanError."""
     price = float(entry["trigger"]["price"])
     t_entry = int(entry["trigger"]["time"])
@@ -259,7 +269,7 @@ def make_plan(entry, cfg, stop_rule="range-low", target_rule="3R", max_hold=None
                     "costs_in_r": round(c["round_trip_pct"] / risk_pct, 2)},
             "max_hold_minutes": hold, "flat_by": t_entry + hold * 60, "range": rng or None,
             "level": entry.get("level"), "range_minutes": rng.get("minutes"),
-            "vol_x": entry.get("vol_x_min"), "max_wait": entry.get("max_wait")}
+            "vol_x": entry.get("vol_x_min"), "max_wait": entry.get("max_wait"), "exits": exits or {}}
 
 
 def render(p, cfg, tz):
@@ -280,6 +290,13 @@ def render(p, cfg, tz):
              "  After costs   -%.2f%% at the stop, +%.2f%% at the target: reward:risk %.2f (costs eat %.2fR)" % (
                  n["loss_pct_at_stop"], n["gain_pct_at_target"], n["reward_risk"], n["costs_in_r"]),
              "  Flat by       %s %s (%d minutes), win or lose" % (local_str(p["flat_by"], tz), tz, p["max_hold_minutes"])]
+    ex = p.get("exits") or {}
+    if ex.get("scale_r"):
+        lines.append("  Partial       sell %g%% at %gR ($%s), then move the stop to the entry" % (
+            float(ex["scale_pct"]), float(ex["scale_r"]), fp(p["entry"] + float(ex["scale_r"]) * p["risk"])))
+    if ex.get("trail_r"):
+        lines.append("  Trailing      keep the stop %gR ($%s) under the highest price since the entry" % (
+            float(ex["trail_r"]), fp(float(ex["trail_r"]) * p["risk"])))
     if n["reward_risk"] < float(cfg.get("min_reward_risk", 1.0)):
         lines.append("  WARNING: after costs the reward:risk is %.2f, under your %g minimum: /meme-risk will block "
                      "it. A farther target, or skip the trade." % (n["reward_risk"], float(cfg.get("min_reward_risk", 1.0))))
@@ -298,6 +315,8 @@ def main(argv=None):
     p.add_argument("--stop", default="range-low", help="range-low (default), range-mid, price:X, pct:X, atr:K")
     p.add_argument("--target", default="3R", help="3R (default), 2R, price:X, pct:X")
     p.add_argument("--max-hold", type=int, help="minutes until the time stop (default max_hold_minutes, 60)")
+    p.add_argument("--scale", help="partial take, like 1.5R:50 (sell 50 %% at 1.5R, then the stop to the entry)")
+    p.add_argument("--trail", help="trailing stop, like 1R under the highest price")
     p.add_argument("--entry", type=float, help="plan at this price (an entry that has not triggered yet)")
     p.add_argument("--address")
     p.add_argument("--symbol")
@@ -312,6 +331,7 @@ def main(argv=None):
     a = ap.parse_args(argv)
     cfg = dict(DEFAULTS)
     cfg.update({k: v for k, v in (load(os.path.join(mdir(), "config.json"), {}) or {}).items() if v is not None})
+    cfg = apply_venue(cfg)
     tz = cfg["timezone"]
     if a.cmd == "show":
         plan = load(os.path.join(mdir(), "plan.json"))
@@ -345,7 +365,18 @@ def main(argv=None):
                 bars = parse_bars(load(a.offline))
             else:
                 bars = parse_bars(get_json(JUP_CHART % (entry["address"], int(entry["trigger"]["time"]) * 1000, 60)))
-        plan = make_plan(entry, cfg, a.stop, a.target, a.max_hold, bars)
+        exits = {}
+        if a.scale:
+            m = re.match(r"^\s*(\d+(?:\.\d+)?)R?\s*:\s*(\d+(?:\.\d+)?)\s*$", a.scale, re.I)
+            if not m or not 0 < float(m.group(2)) < 100:
+                raise PlanError("--scale wants R:PERCENT, like 1.5R:50")
+            exits.update(scale_r=float(m.group(1)), scale_pct=float(m.group(2)))
+        if a.trail:
+            m = re.match(r"^\s*(\d+(?:\.\d+)?)R?\s*$", a.trail, re.I)
+            if not m:
+                raise PlanError("--trail wants a distance in R, like 1R")
+            exits["trail_r"] = float(m.group(1))
+        plan = make_plan(entry, cfg, a.stop, a.target, a.max_hold, bars, exits)
         plan["created_at"] = now
     except PlanError as e:
         print("No plan: %s" % e)

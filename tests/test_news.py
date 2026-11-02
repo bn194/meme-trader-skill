@@ -44,6 +44,23 @@ class News(unittest.TestCase):
         self.assertGreater(len(items), 30)
         self.assertTrue(all(i["title"] and i["id"] for i in items))
 
+    def test_telegram_preview(self):
+        with open(os.path.join(D, "tg-pumpfun.html"), "rb") as fh:
+            posts, subs = N.parse_tg(fh.read(), "pumpfun")
+        self.assertEqual(len(posts), 19)
+        self.assertEqual(subs, "40.8K")
+        last = posts[-1]
+        self.assertEqual(last["id"], "tg:pumpfun/255")
+        self.assertEqual(last["time"], 1792255918)                     # 2026-10-17T16:51:58+00:00
+        self.assertEqual(last["text"], "my favorite trader just posted a callout")
+        self.assertEqual(last["views"], "2.17K")
+        with MemeDir():
+            code, out = run(N, ["--tokens", GATO, "--offline", D, "--now", "2026-11-01 21:58", "--hours", "400",
+                                "--telegram", "pumpfun,nosuchchannel"])
+            self.assertIn("Telegram, 1 channel, last 400 hours (3 posts):", out)
+            self.assertIn("Sat 18:51 t.me/pumpfun (2.17K views): my favorite trader just posted a callout", out)
+            self.assertIn("Could not read: t.me/nosuchchannel", out)
+
 
 if __name__ == "__main__":
     unittest.main()

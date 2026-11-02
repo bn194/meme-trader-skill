@@ -7,7 +7,10 @@ description: >-
   delegates, LP locked or burned, top holders with the pools left out, the
   creator's bag, insider wallet networks, RugCheck's own risk list) and the
   trading record from DexScreener (pool liquidity and age, volume against
-  liquidity for wash trading, buys and sells, market cap, socials). Sums it
+  liquidity for wash trading, buys and sells, market cap, socials), with
+  GoPlus as a second opinion on Solana and the contract check on Base, BSC
+  and Ethereum (honeypot, buy and sell tax, hidden owner, unlocked LP), and
+  the holder count against the last check. Sums it
   up as PASS, CAUTION or AVOID with every reason and writes meme/safety.json,
   which meme-risk requires before any buy. Use when the user says "is this a
   rug", "rug check", "check this token", "is it safe", "who holds it", "is
@@ -35,10 +38,12 @@ python3 "${CLAUDE_SKILL_DIR}/report.py" MINT                 # print the report
 python3 "${CLAUDE_SKILL_DIR}/report.py" MINT --write         # + meme/analyst/MINT.json and meme/safety.json
 python3 "${CLAUDE_SKILL_DIR}/report.py" --watchlist --write  # every hit in meme/watchlist.json, one line each
 python3 "${CLAUDE_SKILL_DIR}/report.py" MINT --json
+python3 "${CLAUDE_SKILL_DIR}/report.py" 0xADDRESS --chain base --write  # Base, BSC, Ethereum: GoPlus
 ```
 
-Other flags: `--chain solana`, `--now "2026-11-01 21:58"`, `--offline-dex
-FILE`, `--offline-rugcheck FILE`. Exit code 0 for PASS or CAUTION, 2 for
+Other flags: `--chain solana` (or base, bsc, ethereum, arbitrum),
+`--no-goplus`, `--now "2026-11-01 21:58"`, `--offline-dex FILE`,
+`--offline-rugcheck FILE`, `--offline-goplus FILE`. Exit code 0 for PASS or CAUTION, 2 for
 AVOID, 1 when it could not run.
 
 ## What it reads and writes
@@ -47,6 +52,8 @@ AVOID, 1 when it could not run.
 | --- | --- |
 | RugCheck `v1/tokens/{mint}/report` | Solana only, free, no key: authorities, Token-2022 extensions, markets and their LP lock, top holders, known accounts, insider networks, risks |
 | DexScreener `tokens/v1/{chain}/{mint}` | the pools: liquidity, age, volume, buys and sells, market cap, socials, boosts |
+| GoPlus `token_security` | free, no key: Solana (mint, freeze, balance and close authorities, Token-2022 traps) and EVM chains (honeypot, taxes, owner powers, verified code, LP lock, holders) |
+| `meme/state/holders.json` | the holder count at each check, for the trend |
 | `meme/config.json` | your limits (below) |
 | `meme/analyst/<mint>.json` | the full report, with `--write` |
 | `meme/safety.json` | one line per coin: verdict, when, liquidity, pool, pool age, reasons. meme-risk reads it |
@@ -69,6 +76,16 @@ AVOID (meme-risk blocks the buy):
 | insider networks over `max_insider_pct` (15 %) | linked wallets (RugCheck's graph) act as one |
 | any RugCheck risk at level danger | RugCheck's own red flags |
 
+GoPlus adds AVOID on Solana for a mintable or freezable token, an
+authority that can change balances or close the token, a non-transferable
+token or a transfer fee. On Base, BSC and Ethereum it is the contract check:
+AVOID for a honeypot (cannot sell), a buy or sell tax over 10 %, unverified
+code, a hidden owner, ownership that can be taken back, an owner who can
+change balances, pausable transfers, a blacklist, a changeable tax, a
+mintable supply, LP under 90 % locked or burned, top 10 over the limit
+(Uniswap v4's PoolManager and the pool are left out) or a creator over the
+limit; CAUTION for a tax up to 10 % and an owner who has not renounced.
+
 CAUTION (meme-risk warns): a pool younger than `min_pool_age_hours` (6),
 fewer than `min_holders` (1,000), metadata that can still change, a transfer
 hook, insiders over 5 %, 24h volume over `max_turnover` (50) times the
@@ -79,10 +96,13 @@ demand) and the creator's bag when it is under the limit.
 
 Holder math leaves out the pools and lockers (RugCheck's `knownAccounts` of
 type AMM or LOCKER, and every market's own account), so a pool that holds 70
-% of the supply does not count as a whale. On a Meteora DLMM or a CLMM pool
+% of the supply does not count as a whale. Holders falling 3 % or more since
+an earlier check in the last day is a CAUTION: people are leaving. On a Meteora DLMM or a CLMM pool
 there is no LP token to burn: that is a CAUTION ("positions the owners can
 withdraw"), not an AVOID. Off Solana there is no RugCheck: the verdict is
-UNVERIFIED, which meme-risk treats as a block while `require_safety` is true.
+UNVERIFIED when GoPlus has nothing either, which meme-risk treats as a block
+while `require_safety` is true. On Solana with GoPlus but no RugCheck report
+the verdict is at best CAUTION (LP, insiders and the creator were not checked).
 
 ## Steps
 

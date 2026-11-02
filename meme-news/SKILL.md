@@ -7,13 +7,17 @@ description: >-
   of them (exchange hacks, listings, regulation, SOL and BTC), DexScreener
   events per coin (paid boosts, new token profiles, community takeovers),
   and each coin's move and pool liquidity compared with your last check, so a
-  pool that is draining shows up as a rug warning. Shows only what is new
+  pool that is draining shows up as a rug warning, plus the public Telegram
+  channels you follow (which coins they name, which contract addresses they
+  post most), and in a Claude session a web search for the coin (public X
+  posts that search engines show, Reddit, articles). Shows only what is new
   since the last check, newest first, in your time zone, tags each item and
   never repeats one. Use when the user says "any news on this coin", "why is
   it pumping", "why is it dumping", "what's happening in crypto", "morning
   briefing", "gibt es news", "warum pumpt das", "was ist los am markt",
-  "check the news", or after /meme-analyst, before /meme-entry.
-argument-hint: "[--tokens MINT,...] [--hours 12] [--market]"
+  "check the news", "what are the telegram channels saying", "was sagt
+  telegram", or after /meme-analyst, before /meme-entry.
+argument-hint: "[--tokens MINT,...] [--hours 12] [--market] [--telegram ch1,ch2]"
 ---
 
 # meme-news
@@ -34,10 +38,12 @@ python3 "${CLAUDE_SKILL_DIR}/news.py"                         # plan, entry, wat
 python3 "${CLAUDE_SKILL_DIR}/news.py" --tokens MINT1,MINT2 --hours 12
 python3 "${CLAUDE_SKILL_DIR}/news.py" --market                # the market only
 python3 "${CLAUDE_SKILL_DIR}/news.py" --all                   # repeat what was already shown
+python3 "${CLAUDE_SKILL_DIR}/news.py" --telegram pumpfun,channel2  # public Telegram channels (or telegram_channels in the config)
 ```
 
-Other flags: `--chain solana`, `--now "2026-11-01 21:58"`, `--offline
-FOLDER` (saved feeds and DexScreener files), `--no-write`, `--json`.
+Other flags: `--chain solana`, `--no-telegram`, `--now "2026-11-01 21:58"`,
+`--offline FOLDER` (saved feeds, DexScreener files and `tg-NAME.html`
+pages), `--no-write`, `--json`.
 
 ## What it reads and writes
 
@@ -47,7 +53,39 @@ FOLDER` (saved feeds and DexScreener files), `--no-write`, `--json`.
 | DexScreener `tokens/v1` | each coin's price, change (5m, 1h, 6h, 24h) and pool liquidity |
 | DexScreener `token-boosts`, `token-profiles`, `community-takeovers` | promotion and takeover events per coin |
 | `meme/plan.json`, `entry.json`, `watchlist.json`, `portfolio.json` | which coins to watch when you name none |
+| `t.me/s/CHANNEL` | the public web preview of each Telegram channel in `telegram_channels`: the last posts, their time and views, the subscriber count. Groups and channels with the preview switched off cannot be read |
 | `meme/state/news.json` | what was shown (never repeated) and each coin's last price and liquidity |
+
+## Telegram
+
+Put the public channels you trust in `meme/config.json` as
+`"telegram_channels": ["pumpfun", "..."]` (the name after t.me/). For each
+coin it lists the posts that name its contract address, its ticker or its
+name, and across all posts the contract addresses posted most. Calls in
+channels are often paid, or the caller's own bags being sold to the readers:
+a mention is a fact, never a reason to buy. X (Twitter) is not read: its
+official API costs about $0.005 per post read since 2026, and scraping it
+breaks its rules.
+
+## The web (in a Claude session)
+
+The tool reads feeds; Claude can also search the web. For a coin the user is
+about to trade or holds, run a web search (the WebSearch tool, and WebFetch
+for a page it finds) for its contract address, `$TICKER` and name, plus
+`TICKER rug` and `TICKER dev sold`. Report in a few lines:
+
+- what people say and where (X posts that search engines show, Reddit,
+  Telegram previews, articles), with the date of each and a link;
+- warnings: rug or scam reports, a dev or team selling, a contract
+  exploit, an exchange halting it;
+- who is pushing it: paid promotion, influencer calls, a "community
+  takeover".
+
+Search results lag and miss most of X; a coin can be all over X and absent
+from search. Never quote a post as proof of anything, never treat hype as
+demand, and say plainly when nothing was found. Calls by influencers are
+often paid or their own bags being sold. This is context for the user's
+decision, not a signal.
 
 ## How it matches and tags
 
@@ -103,8 +141,9 @@ because every coin trades in that weather.
 
 ## What it never does
 
-It never buys or sells, never predicts a price, never scrapes X or Telegram,
-and never calls a headline a reason to trade.
+It never buys or sells, never predicts a price, never logs in anywhere,
+never calls X's paid API or scrapes X, never reads a private Telegram group,
+and never calls a headline, a post or a call a reason to trade.
 
 ## Safety
 

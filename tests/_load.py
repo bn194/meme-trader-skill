@@ -7,6 +7,15 @@ import json
 import os
 import shutil
 import tempfile
+import urllib.error
+import urllib.request
+
+
+def _no_network(*args, **kwargs):
+    raise urllib.error.URLError("the tests run offline: a tool tried to reach the network")
+
+
+urllib.request.urlopen = _no_network  # every test is offline; a stray request fails loudly instead of passing slowly
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FIX = os.path.join(ROOT, "tests", "fixtures")

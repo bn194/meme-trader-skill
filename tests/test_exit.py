@@ -22,12 +22,13 @@ class Exit(unittest.TestCase):
             self.assertEqual(p["target"], 0.0087878)
             self.assertEqual(p["target_r"], 3.0)
             self.assertEqual(p["risk_pct"], 4.275)
-            self.assertEqual(p["costs"]["round_trip_pct"], 2.6)
-            self.assertEqual(p["net"]["reward_risk"], 1.49)
-            self.assertEqual(p["net"]["costs_in_r"], 0.61)
+            self.assertEqual(p["costs"]["round_trip_pct"], 3.3)
+            self.assertEqual(p["net"]["reward_risk"], 1.26)
+            self.assertEqual(p["net"]["costs_in_r"], 0.77)
+            self.assertEqual(p["exits"], {})
             self.assertEqual(p["flat_by"], 1793566680 + 3600)
-            self.assertIn("Fomo fee 0.50% + slippage 0.30% + pool 0.50%", out)
-            self.assertIn("-6.88% at the stop, +10.22% at the target: reward:risk 1.49", out)
+            self.assertIn("Phantom fee 0.85% + slippage 0.30% + pool 0.50%", out)
+            self.assertIn("-7.58% at the stop, +9.52% at the target: reward:risk 1.26", out)
             self.assertIn("Flat by       22:58 Europe/Berlin", out)
 
     def test_a_2r_target_warns_after_costs(self):
@@ -35,7 +36,7 @@ class Exit(unittest.TestCase):
             reel_entry(md)
             code, out = run(X, ["plan", "--target", "2R", "--now", "2026-11-01 21:58"])
             self.assertEqual(code, 0)
-            self.assertIn("reward:risk 0.87", out)
+            self.assertIn("reward:risk 0.69", out)
             self.assertIn("WARNING", out)
 
     def test_a_stop_inside_the_costs_is_refused(self):
@@ -43,7 +44,7 @@ class Exit(unittest.TestCase):
             reel_entry(md)
             code, out = run(X, ["plan", "--stop", "range-mid", "--now", "2026-11-01 21:58"])
             self.assertEqual(code, 1)
-            self.assertIn("2.58% under the entry, less than the 2.60% a round trip costs", out)
+            self.assertIn("2.58% under the entry, less than the 3.30% a round trip costs", out)
 
     def test_refusals(self):
         entry = {"address": GATO, "trigger": {"price": 1.0, "time": 1000, "bar_time": 940},
@@ -64,6 +65,24 @@ class Exit(unittest.TestCase):
         self.assertEqual(X.sig(0.00737835, 5, X.ROUND_FLOOR), 0.0073783)
         self.assertEqual(X.sig(0.00878775, 5), 0.0087878)
         self.assertEqual(X.fp(0.00033295), "0.00033295")
+
+    def test_fomo_costs_less_on_a_big_order_but_has_a_minimum(self):
+        with MemeDir(venue="fomo") as md:
+            reel_entry(md)
+            run(X, ["plan", "--write", "--now", "2026-11-01 21:58"])
+            p = md.read("plan.json")
+            self.assertEqual(p["costs"]["round_trip_pct"], 2.6)
+            self.assertEqual(p["costs"]["fee_min_usd"], 0.95)
+
+    def test_partial_and_trailing_exits_go_into_the_plan(self):
+        with MemeDir() as md:
+            reel_entry(md)
+            code, out = run(X, ["plan", "--write", "--now", "2026-11-01 21:58", "--scale", "1.5R:50", "--trail", "1R"])
+            self.assertEqual(code, 0)
+            self.assertEqual(md.read("plan.json")["exits"], {"scale_r": 1.5, "scale_pct": 50.0, "trail_r": 1.0})
+            self.assertIn("Partial       sell 50% at 1.5R ($0.0082884), then move the stop to the entry", out)
+            code, out = run(X, ["plan", "--now", "2026-11-01 21:58", "--scale", "1.5R:150"])
+            self.assertEqual(code, 1)
 
     def test_atr_stop(self):
         with MemeDir() as md:

@@ -73,8 +73,10 @@ rings. That is why the stop text says "get out now, no second thoughts".
 1. Right after a fill (paper or live): `alerts.py add --from-plan`. Read
    back the four alerts.
 2. Keep `alerts.py watch --every 30` running in the background, or a `/loop`
-   with `alerts.py check`, while the trade is open. Only Claude's check
-   rings; there is no push to the phone from this tool.
+   with `alerts.py check`, while the trade is open. In Claude Code run it
+   under the Monitor tool so every ring arrives as an event; in the Claude
+   app a push notification can then go to the user's phone. The tool itself
+   has no push: it rings only while a session is running it.
 3. When one rings, say it and what it means:
    - STOP or TIME STOP: get out now, in the user's app, or `/meme-broker
      flatten`. Then record it: `ticket.py fill ... --reason stop|time`.
@@ -104,7 +106,7 @@ TIME STOP 22:58: it is 22:58. If GATO is still open, get out now, win or lose: /
 ```
 
 The 22:57 bar closed at 0.0082146: +5.46 % from the entry, +1.28R before
-costs, about +0.67R after the plan's 2.6 % (roughly +$6.50 on the $250).
+costs, about +0.51R after Phantom's 3.3 % (roughly +$0.70 on the $33).
 So the trade meme-risk blocked would have made a small profit this time.
 One trade proves nothing either way: the 35 real trades of the same rule
 before it averaged -0.45R after costs, and that is the number the edge

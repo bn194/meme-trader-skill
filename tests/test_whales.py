@@ -57,9 +57,29 @@ class Whales(unittest.TestCase):
                     return swap(DEV, GATO, -500000, 39 * 10 ** 8)
 
             state = {"last_sig": {}, "seen": []}
-            rows = W.check(Fake(), md.read("wallets.json")["wallets"], state, 10, "Europe/Berlin")
+            rows, clusters = W.check(Fake(), md.read("wallets.json")["wallets"], state, 10, "Europe/Berlin")
+            self.assertEqual(clusters, [])
             self.assertEqual(rows[0]["action"], "SELL")
             self.assertTrue(rows[0]["flags"][0].startswith("DEV SOLD"))
+
+    def test_clusters_and_import(self):
+        state = {"recent_buys": []}
+        alerts = [{"time": 1000, "wallet": "W1", "mint": "M", "action": "BUY", "symbol": "MEME", "label": "a"},
+                  {"time": 1600, "wallet": "W2", "mint": "M", "action": "BUY", "symbol": "MEME", "label": "b"},
+                  {"time": 1700, "wallet": "W3", "mint": "N", "action": "SELL", "symbol": "X", "label": "c"}]
+        c = W.find_clusters(alerts, state)
+        self.assertEqual(len(c), 1)
+        self.assertEqual((c[0]["mint"], c[0]["wallets"]), ("M", ["W1", "W2"]))
+        self.assertEqual(W.find_clusters([{"time": 9000, "wallet": "W4", "mint": "Q", "action": "BUY"}], {"recent_buys": []}), [])
+        txt = W.render([], "Europe/Berlin", 3, c)
+        self.assertIn("CLUSTER: 2 of your wallets bought MEME within 10 minutes (a, b): M", txt)
+        with MemeDir() as md:
+            path = md.file("wallets.txt")
+            with open(path, "w") as fh:
+                fh.write("# public leaderboard\n%s, top trader\nnot-an-address\n%s\n" % (HOLDER, DEV))
+            code, out = run(W, ["import", path])
+            self.assertIn("Imported 2 wallets", out)
+            self.assertEqual(sorted(w["address"] for w in md.read("wallets.json")["wallets"]), sorted([HOLDER, DEV]))
 
 
 if __name__ == "__main__":

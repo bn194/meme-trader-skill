@@ -660,7 +660,7 @@ class Radar(object):
         stake = float(c["fresh_max_order_eur"]) * self.eur_usd
         cost = side_costs(c, stake)
         t = {"n": len(self.trades) + 1, "mint": row["mint"], "symbol": row.get("symbol"), "signal_t": round(now, 1),
-             "signal_price": price, "stake_usd": round(stake, 2), "cost_side": round(cost, 5),
+             "signal_price": price, "stake_usd": round(stake, 2), "eur_usd": round(self.eur_usd, 5), "cost_side": round(cost, 5),
              "stop_pct": float(c["fresh_stop_pct"]), "target_pct": float(c["fresh_target_pct"]),
              "hold_minutes": float(c["fresh_hold_minutes"]), "fill_due": round(now + float(c["fresh_fill_delay_seconds"]), 1),
              "status": "waiting", "paper": True, "path": [[round(now, 1), price]], "why": good}
@@ -795,7 +795,7 @@ def main(argv=None):
         return 0
     if a.cmd == "test":
         trades = (load(fresh_path, {}) or {}).get("trades", [])
-        eur = float(cfg["eur_usd_fallback"])
+        eur = float(([t["eur_usd"] for t in trades if t.get("eur_usd")] or [cfg["eur_usd_fallback"]])[-1])  # the radar's own rate
         for line in test_lines(test_stats(trades, cfg), eur):
             print(line)
         for t in sorted(trades, key=lambda x: -x["signal_t"])[:10]:

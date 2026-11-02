@@ -123,6 +123,7 @@ class PaperTest(unittest.TestCase):
                       "out after 10 minutes; costs about 4.8 % a round trip", out)
         t = r.trades[0]
         self.assertEqual(t["status"], "closed")
+        self.assertEqual(t["eur_usd"], 1.11)
         self.assertEqual((t["entry_t"], t["entry"]), (T0 + 80, 1.1e-5))     # filled 45 s later, at that price
         self.assertEqual((t["trigger_t"], t["exit_reason"]), (T0 + 100, "target"))
         self.assertEqual((t["exit_t"], t["exit"]), (T0 + 150, 1.6e-5))       # sold 45 s after the alarm
@@ -309,6 +310,11 @@ class Cli(unittest.TestCase):
                                                 "exit_reason": "target", "mint": MINT, "symbol": "FRESH"}]})
             code, out = run(D, ["test"])
             self.assertIn("Paper test: 1 of 50 signals closed (0 still running): 1 won, 0 lost, 100 % win rate", out)
+            self.assertIn("total +0.90 EUR", out)                           # at the fallback rate, 1.11
+            md.write("fresh.json", {"trades": [{"n": 1, "signal_t": T0, "status": "closed", "net_usd": 1.0, "net_pct": 0.18,
+                                                "exit_reason": "target", "mint": MINT, "symbol": "FRESH", "eur_usd": 1.25}]})
+            _, out = run(D, ["test"])
+            self.assertIn("total +0.80 EUR", out)                           # at the rate the radar used
             self.assertIn("#1   11-02 07:00  FRESH      %s  +18.0 %% after costs (target)" % MINT, out)
 
     def test_an_old_recording_is_refused(self):

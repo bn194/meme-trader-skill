@@ -5,7 +5,8 @@ description: >-
   earnings analyst reads a 10-Q: the on-chain report from RugCheck (mint and
   freeze authority, Token-2022 traps like transfer fees and permanent
   delegates, LP locked or burned, top holders with the pools left out, the
-  creator's bag, insider wallet networks, RugCheck's own risk list) and the
+  creator's bag, insider wallet networks, a bundle hidden across look-alike
+  wallets, supply sitting in lock contracts, RugCheck's own risk list) and the
   trading record from DexScreener (pool liquidity and age, volume against
   liquidity for wash trading, buys and sells, market cap, socials), with
   GoPlus as a second opinion on Solana and the contract check on Base, BSC
@@ -74,6 +75,8 @@ AVOID (meme-risk blocks the buy):
 | one holder over `max_single_holder_pct` (10 %) | one wallet can dump on you |
 | creator over `max_creator_pct` (5 %) | the dev still holds a bag to sell |
 | insider networks over `max_insider_pct` (15 %) | linked wallets (RugCheck's graph) act as one |
+| `lookalike_avoid` (10) or more of the top 20 wallets hold almost the same amount (within 5 %) | one buyer split across many fresh wallets (a bundle): it hides how much one hand holds, and RugCheck's insider graph often misses it |
+| over `max_locked_pct` (50 %) of the supply in lock or vesting contracts (Streamflow and the like) | only the rest trades now; whoever gets the locked tokens can sell them into the pool when they unlock |
 | any RugCheck risk at level danger | RugCheck's own red flags |
 
 GoPlus adds AVOID on Solana for a mintable or freezable token, an
@@ -90,13 +93,19 @@ CAUTION (meme-risk warns): a pool younger than `min_pool_age_hours` (6),
 fewer than `min_holders` (1,000), metadata that can still change, a transfer
 hook, insiders over 5 %, 24h volume over `max_turnover` (50) times the
 liquidity (wash trading), twice as many sells as buys in the hour, no
-website and no socials, a coin still on its bonding curve, and RugCheck
-risks at level warn. INFO only: paid DexScreener boosts (promotion, not
+website and no socials, a coin still on its bonding curve, `lookalike_caution`
+(6) to 9 look-alike wallets in the top 20, more than `locked_caution_pct` (15
+%) of the supply locked, and RugCheck risks at level warn. INFO only: paid DexScreener boosts (promotion, not
 demand) and the creator's bag when it is under the limit.
 
 Holder math leaves out the pools and lockers (RugCheck's `knownAccounts` of
-type AMM or LOCKER, and every market's own account), so a pool that holds 70
-% of the supply does not count as a whale. Holders falling 3 % or more since
+type AMM, CLOB or LOCKER, and every market's own account), so a pool that holds 70
+% of the supply does not count as a whale. The lockers are counted on their
+own instead (`locked_pct`), and the top 20 wallets are checked for look-alike
+amounts (`lookalike_wallets`): a top 10 of 0.8 % looks spread out, but not
+when 14 of the top 19 wallets hold 0.076 to 0.079 % each (ANAKIN, 2 November
+2026, with no insiders in RugCheck's graph). GoPlus holders get the same two
+checks on Base, BSC and Ethereum. Holders falling 3 % or more since
 an earlier check in the last day is a CAUTION: people are leaving. On a Meteora DLMM or a CLMM pool
 there is no LP token to burn: that is a CAUTION ("positions the owners can
 withdraw"), not an AVOID. Off Solana there is no RugCheck: the verdict is

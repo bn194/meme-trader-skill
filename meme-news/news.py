@@ -281,7 +281,10 @@ def gather_telegram(channels, now, hours, offline=None):
             continue
         if offline:
             path = os.path.join(offline, "tg-%s.html" % ch)
-            raw = open(path, "rb").read() if os.path.exists(path) else None
+            raw = None
+            if os.path.exists(path):
+                with open(path, "rb") as fh:
+                    raw = fh.read()
         else:
             raw = fetch("https://t.me/s/%s" % ch, as_json=False)
         if not raw:

@@ -81,6 +81,31 @@ class Whales(unittest.TestCase):
             self.assertIn("Imported 2 wallets", out)
             self.assertEqual(sorted(w["address"] for w in md.read("wallets.json")["wallets"]), sorted([HOLDER, DEV]))
 
+    def test_transfers_the_wallet_did_not_sign(self):
+        # Anakin's creator, 2026-11-02 06:12: pump.fun's DistributeFeeToHolders moved 225.70 PUMP out of the
+        # wallet, signed by someone else. Not the dev trading, and not Anakin
+        anakin = "ExxzYBTt3jwU5MUxuw2F4toYbTLdFwThSjyaCn6Xpump"
+        dev = "EYuk9azb6QiNAdPTgNmQYbNdfxRvjacHNrHVnXnhWtHB"
+        with MemeDir() as md:
+            md.write("watchlist.json", {"hits": []})
+            md.write("wallets.json", {"wallets": [{"address": dev, "label": "Anakin dev", "role": "dev", "token": anakin}]})
+            code, out = run(W, ["check", "--offline", D, "--json", "--no-write"])
+            self.assertEqual(code, 0)
+            self.assertIn('"signed": false', out)
+            code, out = run(W, ["check", "--offline", D, "--no-write"])
+            self.assertIn("1 new from 1 wallet", out)
+            self.assertIn("+ 1 transfer of pumpCm.. that the wallet did not sign itself", out)
+            self.assertNotIn("DEV", out)
+            self.assertNotIn("SENT", out)
+            md.write("wallets.json", {"wallets": [{"address": dev, "label": "a dev", "role": "dev"}]})
+            _, out = run(W, ["check", "--offline", D, "--no-write"])
+            self.assertIn("DEV MOVED TOKENS: a dev wallet is moving tokens out (no coin set for it", out)
+            self.assertIn("not signed by this wallet: a program or someone else moved it", out)
+        raw = [{"pubkey": dev, "signer": False}, {"pubkey": "x", "signer": True}]
+        self.assertFalse(W.signed_by(raw, dev))
+        self.assertTrue(W.signed_by([{"pubkey": dev}], dev))       # no signer data: assume it signed
+        self.assertTrue(W.signed_by([dev], dev))
+
 
 if __name__ == "__main__":
     unittest.main()

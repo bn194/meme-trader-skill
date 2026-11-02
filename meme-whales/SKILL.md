@@ -73,6 +73,14 @@ Failed transactions are skipped. A dev wallet with a SELL or SENT of its
 own coin gets `DEV SOLD` / `DEV MOVED TOKENS` and goes to the top. A coin
 you hold gets "you hold it", a watched one "on your watchlist".
 
+A transfer the wallet did not sign itself was made by a program or by
+someone else: a fee payout, an airdrop, a spam token. Such a row says "not
+signed by this wallet"; when it is also in a coin you neither hold nor
+watch, it is not listed but summed up in one line (`--json` keeps every
+row). Anakin's creator wallet on 2026-11-02 had 14 of them in one minute:
+pump.fun's `DistributeFeeToHolders` moving PUMP tokens, signed by another
+wallet. Not the dev selling, and not Anakin.
+
 **Rate limits.** The public RPC node allows only a little traffic. The tool
 pauses between calls and waits on a 429. For more than a few wallets, put a
 free RPC endpoint of your own in `meme/config.json` as `"solana_rpc"` (it
@@ -118,13 +126,11 @@ second-largest holder), checked for the first time
 
 ```
 4 new from 1 wallet, newest first (dev alerts on top):
-  2026-10-31 21:07  GATO #2 holder RECEIVED 1,681,796.55 DUuHsG..
-      DUuHsGnX1cwqYjyL4JwwudH3yyxyNAocxCGBiFtopump  tx 4m4G8wXU..dKK2hY
-  2026-10-22 22:40  GATO #2 holder RECEIVED 40.72 A75Xx6..
-  2026-10-22 21:06  GATO #2 holder RECEIVED 7,065.15 CLn6y4..
   2026-08-26 17:45  GATO #2 holder RECEIVED 25,000,000.00 GATO
       HsprHxBRgiVaQdRf3TnKNuZZtaX9JUSPgMFdAkk6pump  tx 3CUukfLy..AKmWqm
       ! on your watchlist
+      not signed by this wallet: a program or someone else moved it
+  + 3 transfers of A75Xx6.., CLn6y4.., DUuHsG.. that the wallet did not sign itself (a program paid out or moved them: fee payouts, airdrops, spam tokens): not trades, so not listed. --json shows them.
 ```
 
 Its 25 million GATO arrived by transfer the day after launch, not by a buy:

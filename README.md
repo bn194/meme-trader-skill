@@ -95,7 +95,7 @@ Zwei Dinge dazu:
 | --- | --- | --- |
 | `/meme-scanner` | Coin Scanner | Findet die Coins, die gerade gehandelt werden, filtert dünne, junge und gewaschene raus, meldet Setups und 1-Minuten-Ausbrüche, sortiert nach Edge. |
 | `/meme-radar` | Launch Radar | Sieht jeden neuen pump.fun-Coin in der ersten Sekunde, sortiert Fallen sofort aus, prüft nach 90 s erneut, meldet Graduierungen und gebündelte Insider-Launches. |
-| `/meme-analyst` | Token Analyst (Rug-Check) | Mint und Freeze, LP gelockt oder verbrannt, Top-Holder, Dev-Bag, Insider, Holder-Verlauf; GoPlus auch für Base und BSC: PASS, CAUTION oder AVOID. |
+| `/meme-analyst` | Token Analyst (Rug-Check) | Mint und Freeze, LP gelockt oder verbrannt, Top-Holder, Dev-Bag, Insider, Bundles über viele gleich große Wallets, gelockter Supply, Holder-Verlauf; GoPlus auch für Base und BSC: PASS, CAUTION oder AVOID. |
 | `/meme-news` | News Monitor | Krypto-Schlagzeilen, öffentliche Telegram-Kanäle, bezahlte Boosts, Community Takeovers, Rug-Warnung bei abfließender Liquidität. |
 | `/meme-entry` | Entry Timer | Beobachtet einen Coin Kerze für Kerze und sagt dir den Moment zum Einstieg. |
 | `/meme-exit` | Exit Planner | Stop, Ziel, Zeitstopp, optional Teilverkauf und Trailing Stop, vor dem Kauf, mit den Gebühren deiner App. |

@@ -9,7 +9,8 @@ description: >-
   reward:risk after costs, and the Time Machine's edge after costs. The day:
   daily loss limit, trades per day, open positions, a pause after a losing
   streak (no revenge trades), no second buy of the same coin, optional entry
-  hours. The basics: format, chain, leverage and perps, blocked coins, size,
+  hours, and the test phase (the first 20 real trades stay small until the
+  journal shows they paid). The basics: format, chain, leverage and perps, blocked coins, size,
   position cap, cash buffer, orders per day. Getting out is never blocked by
   a day limit. Prints PASS or BLOCK with the reason and records it so
   meme-broker only shows what passed. Use when the user says "check my
@@ -82,6 +83,7 @@ Orders are checked in file order, as if each passed order had filled.
 | positions | (entries) `max_open_positions` other coins already held |
 | window | (entries) before `no_entries_before` or after `no_entries_after` (your time zone; off by default) |
 | size, position, cash | (entries) under the minimum or over the max order; over `max_position_pct` in one coin; less than the buffer left in cash |
+| test phase | (entries, live only) over `testphase_max_order_usd` (22) while the first `testphase_trades` (20) real trades are not closed, or after they closed and /meme-journal says FAILED |
 | duplicate | (entries) the same coin bought twice in a batch or already today: a second buy after a stop is a revenge trade |
 | daily limit | `max_orders_per_day` orders already today |
 
@@ -106,23 +108,23 @@ LIVE account, a wide slippage, a price too old to use.
 
 ## Example: the reel
 
-The GATO buy from meme-budget at 21:58 on Sunday 2026-11-01, a fresh $1,000
-paper account, the example config:
+The GATO buy from meme-budget at 21:58 on Sunday 2026-11-01, a fresh paper
+account, the example config (100 EUR, Phantom):
 
 ```
-BLOCK #1 buy $250.00 of GATO, entry
+BLOCK #1 buy $33.00 of GATO, entry
           entry 0.0077889 (the plan's entry), stop 0.0074560, target 0.0087878: risk 4.28%
-          max loss $17.62 incl. $6.94 costs (limit $20.00), reward:risk 1.43 after costs (min 1)
+          max loss $2.49 incl. $1.08 costs (limit $3.30), reward:risk 1.26 after costs (min 1)
           analyst: PASS, checked 0 minutes ago
-          time machine: -0.39R after costs, history -0.45R over 35 trades
-          today before this: 0 of 3 trades, $0.00 of $60.00 daily loss
-        - edge: the time machine's average R after costs is -0.39 (history -0.45 over 35 real trades): this setup has lost money after costs on this coin's recent bars
+          time machine: -0.55R after costs, history -0.42R over 32 trades
+          today before this: 0 of 4 trades, $0.00 of $11.00 daily loss
+        - edge: the time machine's average R after costs is -0.55 (history -0.42 over 32 real trades): this setup has lost money after costs on this coin's recent bars
 
-0 passed, 1 blocked at 2026-11-01 21:58 Europe/Berlin. Cash after the passed orders: $1,000.00 (paper).
+0 passed, 1 blocked at 2026-11-01 21:58 Europe/Berlin. Cash after the passed orders: $111.00 (paper).
 ```
 
-Every other check passed: a clean coin, a $17.62 max loss under the $20
-limit, 1.43 after costs. The edge check stopped it: on GATO's last three
+Every other check passed: a clean coin, a $2.49 max loss under the $3.30
+limit, 1.26 after costs. The edge check stopped it: on GATO's last three
 days this exact setup lost money once the fees were paid. With
 `"require_edge": false` the same order passes, and meme-broker shows it on
 paper.

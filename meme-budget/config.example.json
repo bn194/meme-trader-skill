@@ -1,14 +1,19 @@
 {
-  "budget_usd": 1000,
+  "currency": "EUR",
+  "eur_usd_fallback": 1.11,
+  "budget_usd": 111,
   "cash_buffer_pct": 10,
-  "max_position_pct": 25,
-  "max_order_usd": 250,
-  "min_order_usd": 20,
-  "max_loss_per_trade_usd": 20,
-  "max_daily_loss_usd": 60,
-  "max_trades_per_day": 3,
-  "max_orders_per_day": 10,
+  "max_position_pct": 30,
+  "max_order_usd": 33,
+  "min_order_usd": 10,
+  "max_loss_per_trade_usd": 3.3,
+  "max_daily_loss_usd": 11,
+  "max_trades_per_day": 4,
+  "max_orders_per_day": 12,
   "max_open_positions": 2,
+  "testphase_trades": 20,
+  "testphase_max_order_usd": 22,
+  "testphase_min_profit_factor": 1.2,
   "min_reward_risk": 1.0,
   "require_stop": true,
   "require_edge": true,
@@ -22,10 +27,27 @@
   "chains": [
     "solana"
   ],
-  "venue": "fomo",
+  "venue": "phantom",
+  "venues": {
+    "phantom": {
+      "fee_pct": 0.85,
+      "fee_min_usd": 0,
+      "note": "Phantom in-app swap, 0.85 % (reviews 2026; check the fee line in the app)"
+    },
+    "jupiter": {
+      "fee_pct": 0.1,
+      "fee_min_usd": 0,
+      "note": "jup.ag swap; Jupiter's own fee is small, 0.1 % assumed: check the fee line"
+    },
+    "fomo": {
+      "fee_pct": 0.5,
+      "fee_min_usd": 0.95,
+      "note": "Fomo, 0.5 % with a $0.95 minimum a trade (TechCrunch, Nov 2025; check the app)"
+    }
+  },
   "pay_with": "SOL",
-  "fee_pct": 0.5,
-  "fee_min_usd": 0.95,
+  "fee_pct": 0.85,
+  "fee_min_usd": 0,
   "slippage_pct": 0.3,
   "pool_fee_pct": 0.5,
   "slippage_bps": 150,
@@ -43,6 +65,11 @@
   "require_safety": true,
   "safety_max_age_minutes": 60,
   "solana_rpc": null,
+  "telegram_channels": [],
+  "radar_delay_seconds": 90,
+  "radar_min_buys": 20,
+  "radar_min_volume_usd": 3000,
+  "radar_max_dev_buy_pct": 10,
   "paper": true,
   "blocked": [],
   "allow_leverage": false,

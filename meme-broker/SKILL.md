@@ -66,7 +66,7 @@ python3 "${CLAUDE_SKILL_DIR}/ticket.py" log
 with "yes", "y", "ja" or "j". It refuses: "ok", "sure", "mach", "go"; "yes
 to all", "ja, alle"; a yes with a doubt or a condition ("ja, aber...", "yes
 if it dips"); a question; a yes that names another coin or another amount
-("yes, buy 100" for a $250 order). Never turn a reply into a yes yourself.
+("yes, buy 100" for a $33 order). Never turn a reply into a yes yourself.
 One order per question. Never offer "yes to all".
 
 ## Paper (the default)
@@ -92,12 +92,20 @@ The yes prints the steps for the user's venue (`venue` in the config):
 5. If the price ran well past the plan's entry before the user got there:
    do not chase it. Skip it and say so.
 
-Fomo (fomo.family) is a mobile app for Solana meme coins: 0.5 % a trade with
-a $0.95 minimum, network fees covered by the app (TechCrunch, November 2025;
-check the app's current fees and which order types it offers before
-relying on a stop order there). If the app has no stop order, `/meme-alerts`
-rings at the stop and the user sells by hand. Phantom, Jupiter (jup.ag) and
-pump.fun work the same way: paste the address, buy, report.
+Which app (`venue` in the config): Phantom (0.85 % a swap, no minimum),
+jup.ag in Phantom's in-app browser (Jupiter's own fee is small; check the
+fee line before you swap), or Fomo (0.5 % with a $0.95 minimum, network
+fees covered by the app; TechCrunch, November 2025). With 100 euros the
+minimum makes Fomo the dearest for small buys: /meme-budget prints the same
+trade's cost in each app. No spot stop-loss order is confirmed in Fomo; if
+the app has none, `/meme-alerts` rings at the stop and the user sells by
+hand. All of them work the same way here: paste the address, buy, report.
+
+**Phone only, no computer.** This all works from the Claude app: Claude
+runs the tools in a cloud session, the user taps the trade on the phone.
+The session forgets its files when it ends, so keep `meme/` (config,
+journal, broker log) in a private GitHub repo and commit it after each
+session; never in a public one.
 
 `ticket.py quote --index N` asks Jupiter (read only, no wallet) what the
 order would get right now and the pool's round trip at this size. If it is
@@ -120,17 +128,18 @@ The GATO buy at 21:58 was BLOCKED by meme-risk (the edge check), so with the
 example config there was nothing to show:
 
 ```
-ORDER 1 of 1, PAPER (simulated fills, no money), Fomo
-  BUY $250.00 of GATO on Solana, paid with 2.6539 SOL, max slippage 1.5%
+ORDER 1 of 1, PAPER (simulated fills, no money), Phantom
+  BUY $33.00 of GATO on Solana, paid with 0.3503 SOL, max slippage 1.5%
   contract  HsprHxBRgiVaQdRf3TnKNuZZtaX9JUSPgMFdAkk6pump   <- paste this address, never search by name
   plan: stop $0.0074560, target $0.0087878, flat by 22:58
-  max loss about $17.62 at the stop incl. costs (a meme coin can gap through a stop: it can be worse)
-  BLOCKED by meme-risk: edge: the time machine's average R after costs is -0.39 ...
+  max loss about $2.49 at the stop incl. costs (a meme coin can gap through a stop: it can be worse)
+  BLOCKED by meme-risk: edge: the time machine's average R after costs is -0.55 ...
 ```
 
 With `"require_edge": false` the same order passed and was READY. "ok" and
 "ja, aber nur 100" were not recorded; "ja" was. `ticket.py paper --index 1
---price 0.0077889` bought 31,679.7 GATO for $250.00 on paper.
+--price 0.0077889` bought 4,166.9 GATO for $33.00 on paper; a sale at the
+stop (0.007456) lost $2.44.
 
 ## What it never does
 

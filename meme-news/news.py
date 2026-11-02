@@ -33,6 +33,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import html as htmllib
 import xml.etree.ElementTree as ET
 
 UA = "Mozilla/5.0 (compatible; meme-trader-skill/1.0; +https://github.com/bn194/meme-trader-skill)"
@@ -195,6 +196,37 @@ def parse_rss(raw, source):
     return out
 
 
+def parse_tg(raw, channel):
+    """A public channel's web preview (t.me/s/NAME) -> (posts, subscribers). Posts: id, time, text, views."""
+    text = raw.decode("utf-8", "replace") if isinstance(raw, bytes) else (raw or "")
+    posts = []
+    for block in re.split(r'<div class="tgme_widget_message_wrap', text)[1:]:
+        pid = re.search(r'data-post="([^"]+)"', block)
+        when = re.search(r'<time datetime="([^"]+)"', block)
+        body = re.search(r'<div class="tgme_widget_message_text js-message_text[^"]*"[^>]*>(.*?)</div>', block, re.S)
+        views = re.search(r'tgme_widget_message_views">([^<]+)<', block)
+        ts = None
+        if when:
+            try:
+                ts = calendar.timegm(time.strptime(when.group(1)[:19], "%Y-%m-%dT%H:%M:%S"))
+                off = re.search(r"([+-])(\d\d):(\d\d)$", when.group(1))
+                if off:
+                    ts -= (1 if off.group(1) == "+" else -1) * (int(off.group(2)) * 3600 + int(off.group(3)) * 60)
+            except ValueError:
+                ts = None
+        msg = ""
+        if body:
+            msg = re.sub(r"<br\s*/?>", "\n", body.group(1))
+            msg = htmllib.unescape(re.sub(r"<[^>]+>", "", msg)).strip()
+        posts.append({"id": "tg:" + (pid.group(1) if pid else "%s/%s" % (channel, ts)), "channel": channel, "time": ts,
+                      "text": msg, "views": views.group(1) if views else None})
+    subs = re.search(r'counter_value">([^<]+)</span> <span class="counter_type">(subscribers|members)', text)
+    return posts, (subs.group(1) if subs else None)
+
+
+SOL_ADDR = re.compile(r"\b[1-9A-HJ-NP-Za-km-z]{32,44}\b")
+
+
 def tag(text):
     low = text.lower()
     return [name for name, rx in TAGS if re.search(rx, low)]
@@ -237,6 +269,30 @@ def watched(base):
     for a, pos in ((load(os.path.join(base, "portfolio.json"), {}) or {}).get("positions") or {}).items():
         out.setdefault(a, ("solana", pos.get("symbol")))
     return [(c, a, s) for a, (c, s) in out.items()]
+
+
+def gather_telegram(channels, now, hours, offline=None):
+    """Recent posts of the public channels you follow -> (posts, failed, subscribers)."""
+    since = now - int(hours * 3600)
+    posts, failed, subs = [], [], {}
+    for ch in channels or []:
+        ch = ch.strip().lstrip("@").split("/")[-1]
+        if not ch:
+            continue
+        if offline:
+            path = os.path.join(offline, "tg-%s.html" % ch)
+            raw = open(path, "rb").read() if os.path.exists(path) else None
+        else:
+            raw = fetch("https://t.me/s/%s" % ch, as_json=False)
+        if not raw:
+            failed.append("t.me/" + ch)
+            continue
+        got, n = parse_tg(raw, ch)
+        if not got:
+            failed.append("t.me/%s (no public preview)" % ch)
+        subs[ch] = n
+        posts.extend(p for p in got if p["time"] is None or since <= p["time"] <= now + 300)
+    return posts, failed, subs
 
 
 def gather(tokens, now, hours, offline=None, market=True):
@@ -313,7 +369,36 @@ def gather(tokens, now, hours, offline=None, market=True):
     return coins, market_items, failed
 
 
-def render(coins, market_items, failed, prev, now, tz, hours, show_all, seen):
+def telegram_section(coins, posts, subs, tz, hours, show_all, seen, fresh_ids):
+    out = ["Telegram, %d channel%s, last %g hours (%d posts):" % (len(subs), "" if len(subs) == 1 else "s", hours, len(posts))]
+    for c in coins:
+        hits = [p for p in posts if c["address"] in p["text"] or mentions({"title": p["text"], "summary": ""}, c)]
+        if hits:
+            chans = sorted(set(p["channel"] for p in hits))
+            out.append("  %s named in %d post%s in %s" % (c.get("symbol") or c["address"][:8], len(hits),
+                                                         "" if len(hits) == 1 else "s", ", ".join(chans)))
+            for p in sorted(hits, key=lambda x: -(x["time"] or 0))[:3]:
+                if show_all or p["id"] not in seen:
+                    fresh_ids.append(p["id"])
+                    out.append("    %s t.me/%s: %s" % (local_str(p["time"], tz) if p["time"] else "?", p["channel"],
+                                                       p["text"].replace("\n", " ")[:140]))
+    counts = {}
+    for p in posts:
+        for a in set(SOL_ADDR.findall(p["text"])):
+            counts.setdefault(a, set()).add(p["id"])
+    top = sorted(counts.items(), key=lambda kv: -len(kv[1]))[:5]
+    if top:
+        out.append("  contract addresses posted most: " + ", ".join("%s (%d)" % (a, len(v)) for a, v in top))
+    new = [p for p in sorted(posts, key=lambda x: -(x["time"] or 0)) if show_all or p["id"] not in seen][:5]
+    for p in new:
+        fresh_ids.append(p["id"])
+        out.append("  %-9s t.me/%s%s: %s" % (local_str(p["time"], tz) if p["time"] else "?", p["channel"],
+                                            (" (%s views)" % p["views"]) if p.get("views") else "", p["text"].replace("\n", " ")[:120]))
+    out.append("  Calls in channels are often paid or the poster's own bags. A mention is a fact, not a reason to buy.")
+    return out
+
+
+def render(coins, market_items, failed, prev, now, tz, hours, show_all, seen, tg=None):
     out = []
     fresh_ids = []
     for c in coins:
@@ -355,6 +440,9 @@ def render(coins, market_items, failed, prev, now, tz, hours, show_all, seen):
                                                ", ".join(t for t in it["tags"] if t in MARKET_TAGS), it["title"], it["source"]))
         if len(items) > 8:
             out.append("  ... %d more" % (len(items) - 8))
+    if tg is not None:
+        out.extend(telegram_section(coins, tg[0], tg[2], tz, hours, show_all, seen, fresh_ids))
+        failed = list(failed) + list(tg[1])
     if failed:
         out.append("Could not read: %s (the other sources are complete)." % ", ".join(failed))
     out.append("Headlines are context, not signals. A coin that is in the news is often a coin that already moved.")
@@ -372,6 +460,8 @@ def main(argv=None):
     ap.add_argument("--hours", type=float, default=12)
     ap.add_argument("--market", action="store_true", help="market headlines only")
     ap.add_argument("--all", action="store_true", help="also show what was already shown")
+    ap.add_argument("--telegram", help="comma list of public Telegram channels (default: telegram_channels in the config)")
+    ap.add_argument("--no-telegram", action="store_true")
     ap.add_argument("--now", help='pin the clock, "YYYY-MM-DD HH:MM" in your time zone')
     ap.add_argument("--offline", help="a folder with saved feeds (cointelegraph.xml ...) and DexScreener files")
     ap.add_argument("--no-write", action="store_true")
@@ -392,10 +482,12 @@ def main(argv=None):
     spath = os.path.join(base, "state", "news.json")
     state = load(spath, {"seen": [], "coins": {}}) or {"seen": [], "coins": {}}
     coins, market_items, failed = gather(tokens, now, a.hours, a.offline)
+    channels = [] if a.no_telegram else (a.telegram.split(",") if a.telegram else list(cfg.get("telegram_channels") or []))
+    tg = gather_telegram(channels, now, a.hours, a.offline) if channels else None
     if len(failed) == len(FEEDS) and not coins:
         print("No news source answered. Try again in a minute.")
         return 1
-    text, fresh = render(coins, market_items, failed, state.get("coins"), now, tz, a.hours, a.all, set(state.get("seen", [])))
+    text, fresh = render(coins, market_items, failed, state.get("coins"), now, tz, a.hours, a.all, set(state.get("seen", [])), tg)
     if a.json:
         print(json.dumps({"coins": coins, "market": market_items, "failed": failed}, indent=2))
     else:

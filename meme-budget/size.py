@@ -31,15 +31,16 @@ import urllib.request
 UA = "meme-trader-skill/1.0 (+https://github.com/bn194/meme-trader-skill)"
 SOL = "So11111111111111111111111111111111111111112"
 USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+EURC = "HzwqbKZw8HxMN6bF2yFZNrht3c2iXXzpKcFu7uBEDKtr"
 DECIMALS = {SOL: 9, USDC: 6}
 JUP_QUOTE = "https://lite-api.jup.ag/swap/v1/quote?inputMint=%s&outputMint=%s&amount=%d&slippageBps=%d"
 JUP_PRICE = "https://lite-api.jup.ag/price/v3?ids=%s"
 DS_TOKENS = "https://api.dexscreener.com/tokens/v1/%s/%s"
 FRESH_PRICE_SECONDS = 180
-DEFAULTS = {"budget_usd": 1000, "cash_buffer_pct": 10, "max_position_pct": 25, "max_order_usd": 250,
-            "min_order_usd": 20, "max_loss_per_trade_usd": 20, "min_reward_risk": 1.0, "max_plan_age_minutes": 10,
-            "fee_pct": 0.5, "fee_min_usd": 0.95, "slippage_pct": 0.3, "pool_fee_pct": 0.5, "slippage_bps": 150,
-            "max_price_impact_pct": 1.0, "max_pct_of_liquidity": 0.5, "venue": "fomo", "pay_with": "SOL",
+DEFAULTS = {"budget_usd": 111, "cash_buffer_pct": 10, "max_position_pct": 30, "max_order_usd": 33,
+            "min_order_usd": 10, "max_loss_per_trade_usd": 3.3, "min_reward_risk": 1.0, "max_plan_age_minutes": 10,
+            "fee_pct": 0.85, "fee_min_usd": 0, "slippage_pct": 0.3, "pool_fee_pct": 0.5, "slippage_bps": 150,
+            "max_price_impact_pct": 1.0, "max_pct_of_liquidity": 0.5, "venue": "phantom", "pay_with": "SOL",
             "chains": ["solana"], "blocked": [], "timezone": "Europe/Berlin", "paper": True}
 VENUES = {"fomo": "Fomo", "phantom": "Phantom", "jupiter": "Jupiter", "axiom": "Axiom", "photon": "Photon",
           "bullx": "BullX", "pumpfun": "pump.fun", "solflare": "Solflare", "trojan": "Trojan"}
@@ -47,6 +48,16 @@ VENUES = {"fomo": "Fomo", "phantom": "Phantom", "jupiter": "Jupiter", "axiom": "
 
 class SizeError(Exception):
     pass
+
+def apply_venue(cfg):
+    """The venue's fee profile (config "venues") wins over the plain fee_pct and fee_min_usd."""
+    v = (cfg.get("venues") or {}).get(str(cfg.get("venue", "")).lower())
+    if v:
+        cfg = dict(cfg)
+        cfg["fee_pct"] = float(v.get("fee_pct", cfg.get("fee_pct", 0.85)))
+        cfg["fee_min_usd"] = float(v.get("fee_min_usd") or 0)
+    return cfg
+
 
 
 # ---------------------------------------------------------------- files and time
@@ -215,10 +226,49 @@ def largest(limit_fn, hi):
 
 # ---------------------------------------------------------------- sizing
 
-def size(plan, cfg, now, price=None, cash=None, liquidity=None, measured=None, sol_price=None):
+def live_trades(broker_state):
+    """How many real (not paper) buys the broker log holds: the test phase counts these."""
+    return sum(1 for e in (broker_state or {}).get("events", [])
+               if e.get("type") == "placed" and e.get("side") == "buy" and not e.get("paper"))
+
+
+def testphase_state(c, broker_state):
+    """('off'|'active'|'passed'|'failed', text): the same rule meme-risk and meme-journal use. The cap holds while
+    active or failed. Uses meme-journal next to this skill; without it, the cap holds for the first real buys."""
+    n = int(c.get("testphase_trades") or 0)
+    if c.get("paper", True) or not n:
+        return "off", ""
+    import importlib.util
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "meme-journal", "journal.py")
+    if not os.path.exists(path):
+        k = live_trades(broker_state)
+        return ("active", "real trade %d of %d in the test phase" % (k + 1, n)) if k < n else ("passed", "")
+    spec = importlib.util.spec_from_file_location("meme_sibling_journal", path)
+    j = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(j)
+    done, _ = j.trades_from_log((broker_state or {}).get("events"))
+    live = sorted([j.enrich(t) for t in done if not t.get("paper")], key=lambda t: t["closed_at"])
+    state, text = j.testphase(live, c)
+    if state == "active":
+        text = "real trade %d of %d in the test phase" % (min(live_trades(broker_state), n - 1) + 1, n)
+    return state, text
+
+
+def venue_costs(usd, risk_pct, cfg, liquidity, measured=None):
+    """The same trade's costs at every venue in the config, cheapest first: [(venue, total $, total %)]."""
+    out = []
+    for name in sorted((cfg.get("venues") or {}).keys()):
+        vc = apply_venue(dict(cfg, venue=name))
+        t = trade_costs(usd, risk_pct, vc, liquidity, measured)
+        out.append((name, t["total"], t["total_pct"]))
+    return sorted(out, key=lambda x: x[1])
+
+
+def size(plan, cfg, now, price=None, cash=None, liquidity=None, measured=None, sol_price=None, testphase=None):
     """Pure: the plan, the rules and the market -> (order dict, table). Raises SizeError with the reason."""
     c = dict(DEFAULTS)
     c.update({k: v for k, v in (cfg or {}).items() if v is not None})
+    c = apply_venue(c)
     addr = plan["address"]
     if plan.get("chain", "solana") not in c["chains"]:
         raise SizeError("%s is not in your chains %s" % (plan.get("chain"), c["chains"]))
@@ -259,6 +309,9 @@ def size(plan, cfg, now, price=None, cash=None, liquidity=None, measured=None, s
         ("price impact", largest(lambda u: impact_pct(u, liq) <= float(c["max_price_impact_pct"]), hi),
          "impact <= %g%% a side" % float(c["max_price_impact_pct"])),
     ]
+    if testphase and testphase[0] in ("active", "failed"):
+        table.append(("test phase", int(float(c["testphase_max_order_usd"])),
+                      testphase[1] if testphase[0] == "active" else "test phase FAILED: the cap stays"))
     usd = min(v for _, v, _ in table)
     decided = [n for n, v, _ in table if v == usd][0]
     if usd <= 0:
@@ -301,6 +354,7 @@ def size(plan, cfg, now, price=None, cash=None, liquidity=None, measured=None, s
                      "pool_created_at": plan.get("pool_created_at"), "pair": plan.get("pair"),
                      "setup": plan.get("setup"), "entry_time": plan["entry_time"], "flat_by": plan.get("flat_by"),
                      "plan_created_at": plan.get("created_at"), "sol_price": sol_price}
+    order["plan"]["venues"] = [[n, round(t, 2), round(pc, 2)] for n, t, pc in venue_costs(usd, risk_pct, c, liq, measured)]
     return order, table, decided, cost
 
 
@@ -322,8 +376,32 @@ def render(order, table, decided, cost, cfg, tz):
     lines.append("At the stop: -%s. At the target: +%s. Reward:risk after costs %.2f. Flat by %s." % (
         money(p["max_loss"]), money(p["gain_at_target"]), p["reward_risk_net"],
         local_str(p["flat_by"], tz) if p.get("flat_by") else "n/a"))
+    vs = p.get("venues") or []
+    if len(vs) > 1:
+        names = dict((k, VENUES.get(k, k)) for k, _, _ in vs)
+        lines.append("Same trade at each app: " + ", ".join("%s %s (%.2f%%)" % (names[n], money(t), pc) for n, t, pc in vs) +
+                     (". Cheapest: %s." % names[vs[0][0]] if vs[0][0] != str(cfg.get("venue", "")).lower() else "."))
+    rate = cfg.get("_eur_usd")
+    if str(cfg.get("currency", "")).upper() == "EUR" and rate:
+        lines.append("In euros (1 EUR = %.4f USD): buy %s, -%s at the stop, +%s at the target." % (
+            rate, euro(usd / rate), euro(p["max_loss"] / rate), euro(p["gain_at_target"] / rate)))
     lines.append("A stop is a plan, not a guarantee: a meme coin can gap through it, and a thin pool can fill worse.")
     return "\n".join(lines)
+
+
+def euro(v):
+    return "{:,.2f} EUR".format(v)
+
+
+def eur_rate(prices, cfg):
+    """USD per EUR: EURC's price in meme/prices.json (meme-alerts writes it), else Jupiter, else the fallback."""
+    q = (prices or {}).get("EUR") or {}
+    if q.get("price"):
+        return float(q["price"])
+    try:
+        return float(get_json(JUP_PRICE % EURC)[EURC]["usdPrice"])
+    except (SizeError, KeyError, TypeError, ValueError):
+        return float(cfg.get("eur_usd_fallback") or 1.1)
 
 
 def measure(addr, usd, sol_price, slippage_bps):
@@ -344,6 +422,7 @@ def main(argv=None):
     ap.add_argument("--price", type=float, help="a fresh price to size at (if higher than the plan's entry)")
     ap.add_argument("--liquidity", type=float, help="pool liquidity in USD (default: safety.json / prices.json / DexScreener)")
     ap.add_argument("--sol-price", type=float, help="SOL in USD (default: prices.json or Jupiter)")
+    ap.add_argument("--eur-usd", type=float, help="USD per EUR for the euro line (default: EURC on Jupiter)")
     ap.add_argument("--quote", action="store_true", help="measure the round trip with two Jupiter quotes (Solana)")
     ap.add_argument("--roundtrip", type=float, help="a measured pool round trip in %% at --roundtrip-usd")
     ap.add_argument("--roundtrip-usd", type=float, default=250.0)
@@ -358,6 +437,7 @@ def main(argv=None):
         print("No meme/config.json yet: copy config.example.json from this skill into meme/config.json and set "
               "your budget and max loss first. Using the example defaults for now.")
     cfg.update({k: v for k, v in (user_cfg or {}).items() if v is not None})
+    cfg = apply_venue(cfg)
     tz = cfg["timezone"]
     try:
         now = parse_now(a.now, tz)
@@ -390,10 +470,13 @@ def main(argv=None):
             measured = {"usd": a.roundtrip_usd, "pool_round_trip_pct": a.roundtrip}
         cash = (portfolio or {}).get("cash_usd")
         price = a.price or fresh.get("price")
-        order, table, decided, cost = size(plan, cfg, now, price, cash, liq, measured, sol_price)
+        tp = testphase_state(cfg, load(os.path.join(base, "state", "broker.json"), {}))
+        if str(cfg.get("currency", "")).upper() == "EUR":
+            cfg["_eur_usd"] = a.eur_usd or eur_rate(prices, cfg)
+        order, table, decided, cost = size(plan, cfg, now, price, cash, liq, measured, sol_price, tp)
         if a.quote and plan.get("chain", "solana") == "solana" and sol_price:
             measured = measure(plan["address"], float(order["amount_usd"]), sol_price, int(cfg["slippage_bps"]))
-            order, table, decided, cost = size(plan, cfg, now, price, cash, liq, measured, sol_price)
+            order, table, decided, cost = size(plan, cfg, now, price, cash, liq, measured, sol_price, tp)
         if measured is not None:
             order["plan"]["measured"] = measured  # meme-risk recomputes the costs from the same measurement
     except SizeError as e:

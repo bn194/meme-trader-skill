@@ -77,6 +77,7 @@ class Analyst(unittest.TestCase):
         with MemeDir() as md:
             code, out = run(A, [GATO, "--offline-dex", os.path.join(D, "dex-GATO-2158.json"),
                                 "--offline-rugcheck", os.path.join(D, "rugcheck-GATO-2158.json"),
+                                "--offline-goplus", os.path.join(D, "goplus-GATO.json"),
                                 "--now", "2026-11-01 21:58", "--write"])
             self.assertEqual(code, 0)
             self.assertIn("Verdict: PASS (0 avoid, 0 caution)", out)
@@ -90,7 +91,7 @@ class Analyst(unittest.TestCase):
         with MemeDir():
             code, out = run(A, ["D3YBbpwUAENRYkKW7H4crp67icXazkZFb2UajoW31yoi",
                                 "--offline-dex", os.path.join(D, "dex-MONEYBIZ.json"),
-                                "--offline-rugcheck", os.path.join(D, "rugcheck-MONEYBIZ.json")])
+                                "--offline-rugcheck", os.path.join(D, "rugcheck-MONEYBIZ.json"), "--no-goplus"])
             self.assertEqual(code, 2)
             self.assertIn("meme-risk blocks any buy", out)
 
@@ -99,6 +100,55 @@ class Analyst(unittest.TestCase):
             code, out = run(A, ["GATO"])
             self.assertEqual(code, 1)
             self.assertIn("symbols are not unique", out)
+
+    def test_goplus_agrees_on_gato(self):
+        with open(os.path.join(D, "goplus-GATO.json")) as fh:
+            gp = json.load(fh)
+        with open(os.path.join(D, "dex-GATO-2158.json")) as fh:
+            pairs = json.load(fh)
+        with open(os.path.join(D, "rugcheck-GATO-2158.json")) as fh:
+            rc = json.load(fh)
+        r = A.analyze("solana", GATO, pairs, rc, {}, 1793566680, gp)
+        self.assertEqual(r["verdict"], "PASS")
+        self.assertIn("GoPlus", r["sources"])
+        r = A.analyze("solana", GATO, pairs, None, {}, 1793566680, gp)     # GoPlus alone: checked, but not everything
+        self.assertEqual(r["verdict"], "CAUTION")
+        self.assertIn("no_rugcheck", codes(r, "caution"))
+
+    def test_goplus_on_base(self):
+        with open(os.path.join(D, "goplus-ONECOIN-base.json")) as fh:
+            gp = json.load(fh)
+        with open(os.path.join(D, "dex-ONECOIN-base.json")) as fh:
+            pairs = json.load(fh)
+        addr = "0x456aC19C8a72Aed16376D57c367640D69ff9e6ea"
+        r = A.analyze("base", addr, pairs, None, {}, 1793570000, gp)
+        self.assertEqual(r["verdict"], "AVOID")
+        self.assertTrue({"lp_unlocked", "liquidity"} <= codes(r, "avoid"))
+        self.assertIn("owner", codes(r, "caution"))
+        self.assertAlmostEqual(r["metrics"]["top10_pct"], 18.6, delta=0.05)  # the Uniswap v4 PoolManager is left out
+        self.assertEqual(A.analyze("base", addr, pairs, None, {}, 1793570000)["verdict"], "AVOID")
+        gp2 = json.loads(json.dumps(gp))
+        g = list(gp2["result"].values())[0]
+        g.update(is_honeypot="1", sell_tax="0.25")
+        r = A.analyze("base", addr, pairs, None, {}, 1793570000, gp2)
+        self.assertTrue({"honeypot", "tax"} <= codes(r, "avoid"))
+
+    def test_holder_trend(self):
+        with open(os.path.join(D, "dex-GATO-2158.json")) as fh:
+            pairs = json.load(fh)
+        with open(os.path.join(D, "rugcheck-GATO-2158.json")) as fh:
+            rc = json.load(fh)
+        hist = [[1793566680 - 7200, 14400]]
+        r = A.analyze("solana", GATO, pairs, rc, {}, 1793566680, None, hist)
+        self.assertEqual(r["metrics"]["holder_trend"]["change"], 13645 - 14400)
+        self.assertIn("holders_falling", codes(r, "caution"))
+        r = A.analyze("solana", GATO, pairs, rc, {}, 1793566680, None, [[1793566680 - 7200, 13500]])
+        self.assertNotIn("holders_falling", codes(r, "caution"))
+        with MemeDir() as md:
+            for now in ("2026-11-01 20:00", "2026-11-01 21:58"):
+                run(A, [GATO, "--offline-dex", os.path.join(D, "dex-GATO-2158.json"), "--offline-rugcheck",
+                        os.path.join(D, "rugcheck-GATO-2158.json"), "--no-goplus", "--now", now, "--write"])
+            self.assertEqual(len(md.read("state/holders.json")[GATO]), 2)
 
 
 if __name__ == "__main__":

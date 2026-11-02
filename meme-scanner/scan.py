@@ -402,6 +402,64 @@ def scan_range(net, cands, a, now):
     return hits, failed
 
 
+# ---------------------------------------------------------------- edge: the rule's own history on each coin
+
+def sibling(folder, name):
+    """Load a tool from a sibling skill folder, or None if it is not installed next to this one."""
+    import importlib.util
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", folder, name + ".py")
+    if not os.path.exists(path):
+        return None
+    spec = importlib.util.spec_from_file_location("meme_sibling_" + name, path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def round_trip_pct(cfg):
+    v = (cfg.get("venues") or {}).get(str(cfg.get("venue", "")).lower()) or {}
+    fee = float(v.get("fee_pct", cfg.get("fee_pct", 0.85)))
+    return 2 * (fee + float(cfg.get("slippage_pct", 0.3)) + float(cfg.get("pool_fee_pct", 0.5)))
+
+
+def add_edge(hits, cfg, now, days=3.0, limit=10, bundle=None):
+    """The default range-breakout rule (15 minutes, range-low stop, 3R, 60-minute time stop) replayed on each hit's
+    own last days, after your app's costs. Sorts the hits by it. Returns a note when it cannot run."""
+    tm = sibling("meme-timemachine", "timemachine")
+    if tm is None:
+        return "edge skipped: meme-timemachine is not installed next to the scanner"
+    rule = {"range_minutes": 15, "vol_x": 1.5, "max_wait": 60, "target_r": 3.0, "stop_rule": "range-low",
+            "risk_pct": 4.0, "round_trip_pct": round_trip_pct(cfg), "setup": "range"}
+    for h in hits[:limit]:
+        try:
+            if bundle is not None:
+                bars = tm.parse_bars(bundle.get(h["address"]) or {})
+            else:
+                bars = tm.fetch_history({"address": h["address"], "chain": h.get("chain", "solana"), "pair": h.get("pair"),
+                                         "entry_time": now}, days)
+        except tm.TMError:
+            bars = []
+        rows = [b for b in bars if b["t"] + 60 <= now]
+        if len(rows) < 600:
+            h["edge"] = {"trades": 0, "avg_r_net": None, "note": "too few bars"}
+            continue
+        res = tm.history({}, rows, 60, {}, rule)
+        h["edge"] = {"trades": res["fired"], "avg_r_net": res.get("avg_r_net"),
+                     "days": round((rows[-1]["t"] - rows[0]["t"] + 60) / 86400.0, 1)}
+    hits.sort(key=lambda x: -((x.get("edge") or {}).get("avg_r_net") if (x.get("edge") or {}).get("avg_r_net") is not None else -99))
+    return None
+
+
+def edge_text(h):
+    e = h.get("edge")
+    if not e:
+        return ""
+    if e.get("avg_r_net") is None:
+        return "edge: n/a (%s)" % (e.get("note") or "%d past trades" % e.get("trades", 0))
+    return "edge: %+.2fR after costs over %d past breakouts (%.1f days)%s" % (
+        e["avg_r_net"], e["trades"], e.get("days") or 0, "" if e["avg_r_net"] > 0 else "  LOST MONEY")
+
+
 # ---------------------------------------------------------------- output
 
 def _k(v):
@@ -455,6 +513,9 @@ def main(argv=None):
         p.add_argument("--range-minutes", type=int, default=15)
         p.add_argument("--fresh", type=int, default=10, help="range: look at the last N completed bars")
         p.add_argument("--vol-x", type=float, default=1.5, help="range: breakout bar volume vs the range average")
+        p.add_argument("--edge", action="store_true", help="replay the breakout rule on each hit's last 3 days, sort by it")
+        p.add_argument("--edge-max", type=int, default=10)
+        p.add_argument("--edge-offline", help="saved bars for --edge, {mint: {candles: [...]}}")
     a = ap.parse_args(argv)
     cfg = dict(DEFAULTS)
     cfg.update(load(os.path.join(mdir(), "config.json"), {}) or {})
@@ -512,6 +573,7 @@ def run(a, net, cfg, chains, tz, now):
         if not a.no_write:
             save(upath, uni)
         stats, hits, _ = scan_pairs(uni, cfg, a, now)
+        note = add_edge(hits, cfg, now, limit=a.edge_max, bundle=load(a.edge_offline) if a.edge_offline else None) if a.edge else None
         wl = {"mode": "pairs", "as_of": now, "chains": chains, "stats": stats,
               "filters": {"min_liquidity_usd": a.min_liquidity, "min_age_hours": a.min_age_hours,
                           "min_mcap": a.min_mcap, "min_txns_h1": a.min_txns, "max_turnover": a.max_turnover},
@@ -533,7 +595,11 @@ def run(a, net, cfg, chains, tz, now):
             print("  %-10s $%-11s liq $%-6s mcap $%-6s 5m %s 1h %s 24h %s  %s" % (
                 (h["symbol"] or "?")[:10], fp(h["price_usd"]), _k(h["liquidity_usd"]), _k(h["market_cap"]),
                 _c(h["change"]["m5"]), _c(h["change"]["h1"]), _c(h["change"]["h24"]), ",".join(h["setups"])))
-            print("             %s" % h["address"])
+            print("             %s  %s" % (h["address"], edge_text(h)))
+        if note:
+            print(note)
+        elif a.edge:
+            print("Sorted by edge: the range-breakout rule replayed on each coin's own last days, after your costs.")
         if len(hits) > a.show:
             print("  ... %d more in meme/watchlist.json" % (len(hits) - a.show))
         return 0 if hits else 1
@@ -563,6 +629,7 @@ def run(a, net, cfg, chains, tz, now):
     if a.max_confirm:
         cands = cands[:a.max_confirm]
     hits, failed = scan_range(net, cands, a, now)
+    note = add_edge(hits, cfg, now, limit=a.edge_max, bundle=load(a.edge_offline) if a.edge_offline else None) if a.edge else None
     wl = {"mode": "range", "as_of": now, "chains": chains, "range_minutes": a.range_minutes, "fresh": a.fresh,
           "vol_x": a.vol_x, "checked": len(cands), "failed": failed, "skipped": skipped, "hits": hits}
     if not a.no_write:
@@ -580,7 +647,11 @@ def run(a, net, cfg, chains, tz, now):
             local_str(h["close_time"], tz), (h["symbol"] or "?")[:10], fp(h["close"]), fp(h["range_low"]),
             fp(h["range_high"]), local_str(h["range_start"], tz), local_str(h["range_end"], tz),
             h["over_pct"], h["vol_x"]))
-        print("         %s  now $%s" % (h["address"], fp(h["last_close"])))
+        print("         %s  now $%s  %s" % (h["address"], fp(h["last_close"]), edge_text(h)))
+    if note:
+        print(note)
+    elif a.edge and hits:
+        print("Sorted by edge: the same breakout rule replayed on each coin's own last days, after your costs.")
     return 0 if hits else 1
 
 

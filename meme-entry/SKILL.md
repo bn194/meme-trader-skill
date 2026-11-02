@@ -38,7 +38,8 @@ Other flags: `--range-minutes 15`, `--vol-x 1.5` (0 switches the volume
 check off), `--max-wait 60` (minutes after the range), `--chain`, `--symbol`,
 `--now "2026-11-01 21:58"`, `--offline FILE` (saved bars, or a scanner
 bundle), `--no-write`, `--json`. MINT can also be a DexScreener URL or a
-ticker that is in `meme/watchlist.json`. Exit code 0 when triggered.
+ticker that is in `meme/watchlist.json` or was checked by `/meme-analyst`
+(`meme/safety.json`). Exit code 0 when triggered.
 
 ## What it reads and writes
 

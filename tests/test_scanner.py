@@ -87,6 +87,18 @@ class Range(unittest.TestCase):
         jup = S.parse_bars({"candles": [{"time": 60, "open": 1, "high": 2, "low": 0.5, "close": 1.5, "volume": 9}]})
         self.assertEqual(jup[0]["c"], 1.5)
 
+class Edge(unittest.TestCase):
+    def test_edge_sorts_and_marks_losers(self):
+        with MemeDir():
+            code, out = run(S, ["range", "--offline", RANGE, "--no-gecko", "--edge", "--edge-offline",
+                                os.path.join(FIX, "meme-timemachine", "eleven-coins-1m-2026-11-01.json.gz")])
+            self.assertIn("edge: -0.89R after costs over 8 past breakouts (0.7 days)  LOST MONEY", out)
+            self.assertIn("Sorted by edge", out)
+
+    def test_round_trip_follows_the_venue(self):
+        self.assertAlmostEqual(S.round_trip_pct({"venue": "fomo", "venues": {"fomo": {"fee_pct": 0.5}}}), 2.6)
+        self.assertAlmostEqual(S.round_trip_pct({"venue": "phantom", "venues": {"phantom": {"fee_pct": 0.85}}}), 3.3)
+
 
 if __name__ == "__main__":
     unittest.main()

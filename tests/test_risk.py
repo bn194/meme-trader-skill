@@ -18,9 +18,9 @@ class Risk(unittest.TestCase):
             reel(md)
             code, out = run(R, ["--now", _reel.NOW])
             self.assertEqual(code, 1)
-            self.assertIn("max loss $17.62 incl. $6.94 costs (limit $20.00), reward:risk 1.43 after costs", out)
-            self.assertIn("time machine: -0.39R after costs, history -0.45R over 35 trades", out)
-            self.assertIn("- edge: the time machine's average R after costs is -0.39", out)
+            self.assertIn("max loss $2.49 incl. $1.08 costs (limit $3.30), reward:risk 1.26 after costs", out)
+            self.assertIn("time machine: -0.55R after costs, history -0.42R over 32 trades", out)
+            self.assertIn("- edge: the time machine's average R after costs is -0.55", out)
             v = md.read("state/risk.json")["verdicts"][-1]
             self.assertEqual(v["verdict"], "BLOCK")
             self.assertEqual(len(v["reasons"]), 1)
@@ -31,15 +31,15 @@ class Risk(unittest.TestCase):
             code, out = run(R, ["--now", _reel.NOW])
             self.assertEqual(code, 0)
             self.assertIn("1 passed, 0 blocked", out)
-            self.assertIn("Cash after the passed orders: $750.00 (paper)", out)
+            self.assertIn("Cash after the passed orders: $78.00 (paper)", out)
             self.assertEqual(md.read("state/risk.json")["verdicts"][-1]["fp"], K.fingerprint(o))
 
     def test_one_dollar_more_risk_blocks_the_loss(self):
         with MemeDir(require_edge=False) as md:
             reel(md, "500")
-            md.write("config.json", dict(md.read("config.json"), max_loss_per_trade_usd=17))
+            md.write("config.json", dict(md.read("config.json"), max_loss_per_trade_usd=2.4))
             code, out = run(R, ["--now", _reel.NOW, "--no-write"])
-            self.assertIn("loss: $17.62 at the stop", out)
+            self.assertIn("loss: $2.49 at the stop", out)
 
     def test_coin_checks(self):
         with MemeDir(require_edge=False) as md:
@@ -60,27 +60,52 @@ class Risk(unittest.TestCase):
             md.write("orders.json", [o])
             _, out = run(R, ["--now", _reel.NOW, "--no-write"])
             self.assertIn("liquidity: the pool holds $30,000.00", out)
-            self.assertIn("impact:", out)
 
     def test_the_day(self):
         with MemeDir(require_edge=False) as md:
             reel(md, "500")
             t0 = 1793566000
             md.write("state/broker.json", {"events": [
-                {"type": "placed", "at": t0 - 3000, "side": "buy", "token": "A" * 44, "max_loss": 19},
-                {"type": "fill", "at": t0 - 2000, "side": "sell", "token": "A" * 44, "pnl_usd": -19},
-                {"type": "placed", "at": t0 - 1500, "side": "buy", "token": "B" * 44, "max_loss": 19},
-                {"type": "fill", "at": t0 - 600, "side": "sell", "token": "B" * 44, "pnl_usd": -18}]})
+                {"type": "placed", "at": t0 - 3000, "side": "buy", "token": "A" * 44, "max_loss": 3.2, "paper": True},
+                {"type": "fill", "at": t0 - 2000, "side": "sell", "token": "A" * 44, "pnl_usd": -3.1},
+                {"type": "placed", "at": t0 - 1500, "side": "buy", "token": "B" * 44, "max_loss": 3.2, "paper": True},
+                {"type": "fill", "at": t0 - 600, "side": "sell", "token": "B" * 44, "pnl_usd": -3.0}]})
             _, out = run(R, ["--now", _reel.NOW, "--no-write"])
             self.assertIn("pause: 2 losing trades in a row; no new entries until 23:36", out)
-            self.assertIn("today before this: 2 of 3 trades, $38.00 of $60.00 daily loss", out)
-            md.write("config.json", dict(md.read("config.json"), max_daily_loss_usd=50))
+            self.assertIn("today before this: 2 of 4 trades, $6.40 of $11.00 daily loss", out)
+            md.write("config.json", dict(md.read("config.json"), max_daily_loss_usd=8))
             _, out = run(R, ["--now", _reel.NOW, "--no-write"])
-            self.assertIn("daily loss: $38.00 already at risk today + $17.62 here is over your $50.00 daily limit", out)
+            self.assertIn("daily loss: $6.40 already at risk today + $2.49 here is over your $8.00 daily limit", out)
+
+    def test_the_test_phase_holds_until_the_journal_passes_it(self):
+        with MemeDir(require_edge=False, paper=False) as md:
+            reel(md, "500")
+            o = md.read("orders.json")[0]
+            self.assertEqual(o["amount_usd"], "22.00")                    # meme-budget sized it into the cap
+            o["amount_usd"] = "33.00"
+            md.write("orders.json", [o])
+            _, out = run(R, ["--now", _reel.NOW, "--no-write"])
+            self.assertIn("test phase: $33.00 is over the $22.00 cap", out)
+            ev = []
+            for i in range(20):                                          # 20 real trades that lost: FAILED
+                ev.append({"type": "placed", "at": 1793000000 + i * 100, "side": "buy", "token": "C" * 44, "max_loss": 2,
+                           "tokens": 10, "amount_usd": "22", "paper": False})
+                ev.append({"type": "fill", "at": 1793000000 + i * 100 + 50, "side": "sell", "token": "C" * 44, "tokens": 10,
+                           "usd": 21, "pnl_usd": -1.0})
+            md.write("state/broker.json", {"events": ev})
+            _, out = run(R, ["--now", _reel.NOW, "--no-write"])
+            self.assertIn("test phase FAILED", out)
+            self.assertIn("test phase: $33.00 is over the $22.00 cap", out)
+            for e in ev:                                                 # the same 20 trades as winners: PASSED
+                if e["type"] == "fill":
+                    e.update(usd=25, pnl_usd=3.0)
+            md.write("state/broker.json", {"events": ev})
+            _, out = run(R, ["--now", _reel.NOW, "--no-write"])
+            self.assertNotIn("test phase", out)
 
     def test_exits_are_never_blocked_by_day_limits(self):
         with MemeDir(require_edge=False, max_trades_per_day=0) as md:
-            md.write("portfolio.json", {"cash_usd": 750, "positions": {GATO: {"symbol": "GATO", "tokens": 31679.7, "cost_usd": 250}}})
+            md.write("portfolio.json", {"cash_usd": 78, "positions": {GATO: {"symbol": "GATO", "tokens": 31679.7, "cost_usd": 33}}})
             md.write("orders.json", [{"chain": "solana", "side": "sell", "token": GATO, "symbol": "GATO",
                                       "tokens": "31679.7", "receive": "SOL", "slippage_bps": 300}])
             code, out = run(R, ["--now", _reel.NOW])

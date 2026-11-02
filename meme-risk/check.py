@@ -31,16 +31,26 @@ import time
 
 FP_FIELDS = ("chain", "side", "token", "amount_usd", "pay_with", "amount_in", "tokens", "receive", "slippage_bps")
 FRESH_PRICE_SECONDS = 180
-DEFAULTS = {"budget_usd": 1000, "cash_buffer_pct": 10, "max_position_pct": 25, "max_order_usd": 250,
-            "min_order_usd": 20, "max_loss_per_trade_usd": 20, "max_daily_loss_usd": 60, "max_trades_per_day": 3,
-            "max_orders_per_day": 10, "max_open_positions": 2, "min_reward_risk": 1.0, "require_stop": True,
+DEFAULTS = {"budget_usd": 111, "cash_buffer_pct": 10, "max_position_pct": 30, "max_order_usd": 33,
+            "min_order_usd": 10, "max_loss_per_trade_usd": 3.3, "max_daily_loss_usd": 11, "max_trades_per_day": 4,
+            "max_orders_per_day": 12, "max_open_positions": 2, "testphase_trades": 20, "testphase_max_order_usd": 22, "min_reward_risk": 1.0, "require_stop": True,
             "require_edge": True, "max_plan_age_minutes": 10, "losing_streak_pause": 2, "pause_minutes": 120,
             "no_entries_before": None, "no_entries_after": None, "timezone": "Europe/Berlin",
-            "chains": ["solana"], "fee_pct": 0.5, "fee_min_usd": 0.95, "slippage_pct": 0.3, "pool_fee_pct": 0.5,
+            "chains": ["solana"], "fee_pct": 0.85, "fee_min_usd": 0, "slippage_pct": 0.3, "pool_fee_pct": 0.5, "venue": "phantom",
             "max_price_impact_pct": 1.0, "max_pct_of_liquidity": 0.5, "min_liquidity_usd": 50000,
             "min_pool_age_hours": 6, "require_safety": True, "safety_max_age_minutes": 60, "paper": True,
             "blocked": [], "allow_leverage": False, "allow_perps": False, "allow_short": False}
 ADDRESS = re.compile(r"^(0x[0-9a-fA-F]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$")
+
+def apply_venue(cfg):
+    """The venue's fee profile (config "venues") wins over the plain fee_pct and fee_min_usd."""
+    v = (cfg.get("venues") or {}).get(str(cfg.get("venue", "")).lower())
+    if v:
+        cfg = dict(cfg)
+        cfg["fee_pct"] = float(v.get("fee_pct", cfg.get("fee_pct", 0.85)))
+        cfg["fee_min_usd"] = float(v.get("fee_min_usd") or 0)
+    return cfg
+
 
 
 # ---------------------------------------------------------------- files and time
@@ -170,6 +180,33 @@ def trade_costs(usd, risk_pct, cfg, liquidity, measured=None):
     return fees + slip + usd * pool_rt / 100.0
 
 
+# ---------------------------------------------------------------- the test phase (meme-journal's rule)
+
+def sibling(folder, name):
+    """Load a tool from a sibling skill folder (meme-journal next to meme-risk), or None if it is not installed."""
+    import importlib.util
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", folder, name + ".py")
+    if not os.path.exists(path):
+        return None
+    spec = importlib.util.spec_from_file_location("meme_sibling_" + name, path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def testphase_state(broker, cfg, live_buys):
+    """'off', 'active', 'passed' or 'failed', with the text. The cap holds while active or failed."""
+    if cfg.get("paper", True) or not int(cfg.get("testphase_trades") or 0):
+        return "off", ""
+    j = sibling("meme-journal", "journal")
+    if j is None:
+        n = int(cfg["testphase_trades"])
+        return ("active", "test phase: %d of %d real buys" % (live_buys, n)) if live_buys < n else ("passed", "")
+    done, _ = j.trades_from_log((broker or {}).get("events"))
+    live = sorted([j.enrich(t) for t in done if not t.get("paper")], key=lambda t: t["closed_at"])
+    return j.testphase(live, cfg)
+
+
 # ---------------------------------------------------------------- the day so far
 
 def day_of(ts, tz):
@@ -188,7 +225,8 @@ def the_day(broker, today, tz):
             last_loss_at = last_loss_at or int(e["at"])
         else:
             break
-    return {"orders": len(placed), "entries": len(entries),
+    live = sum(1 for e in ev if e.get("type") == "placed" and e.get("side") == "buy" and not e.get("paper"))
+    return {"orders": len(placed), "entries": len(entries), "live_buys": live,
             "risked": sum(float(e.get("max_loss") or 0) for e in entries),
             "tokens_today": {(e.get("token"), e.get("side")) for e in placed},
             "streak": streak, "last_loss_at": last_loss_at}
@@ -199,9 +237,11 @@ def the_day(broker, today, tz):
 def check_all(orders, cfg, portfolio, prices, safety, broker, tm, now):
     c = dict(DEFAULTS)
     c.update({k: v for k, v in (cfg or {}).items() if v is not None})
+    c = apply_venue(c)
     tz = c["timezone"]
     today = day_of(now, tz)
     day = the_day(broker, today, tz)
+    tp_state, tp_text = testphase_state(broker, c, day["live_buys"])
     budget = float(c["budget_usd"])
     port = portfolio if portfolio else {"cash_usd": budget, "positions": {}}
     cash = float(port.get("cash_usd", budget))
@@ -363,6 +403,13 @@ def check_all(orders, cfg, portfolio, prices, safety, broker, tm, now):
                 entry_rules.append("size: %s is under your %s minimum order" % (money(usd), money(float(c["min_order_usd"]))))
             if usd > float(c["max_order_usd"]) + 1e-9:
                 entry_rules.append("size: %s is over your %s max order" % (money(usd), money(float(c["max_order_usd"]))))
+            if tp_state in ("active", "failed"):
+                cap = float(c["testphase_max_order_usd"])
+                info["testphase"] = "%s (max %s an order)" % (tp_text, money(cap))
+                if usd > cap + 1e-9:
+                    entry_rules.append("test phase: %s is over the %s cap; it stays until /meme-journal shows the "
+                                       "setup paid after costs over %d real trades" % (money(usd), money(cap),
+                                                                                       int(c["testphase_trades"])))
             pos_val = float((positions.get(token) or {}).get("cost_usd") or 0) + usd
             if pos_val > budget * float(c["max_position_pct"]) / 100.0 + 1e-9:
                 entry_rules.append("position: %s in one coin is over %g%% of your %s" % (money(pos_val), float(c["max_position_pct"]), money(budget)))
@@ -418,6 +465,8 @@ def render(results, cash, c, now, tz):
         if i.get("edge") and i["edge"][0] is not None:
             out.append("          time machine: %+.2fR after costs%s" % (i["edge"][0], (", history %+.2fR over %d trades" % (
                 i["edge"][2], i["edge"][1])) if i["edge"][1] else ""))
+        if i.get("testphase"):
+            out.append("          %s" % i["testphase"])
         if r["side"] == "buy":
             out.append("          today before this: %d of %d trades, %s of %s daily loss" % (
                 r["day"]["entries"], int(c["max_trades_per_day"]), money(r["day"]["risked"]), money(float(c["max_daily_loss_usd"]))))

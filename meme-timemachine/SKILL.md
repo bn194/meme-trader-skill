@@ -9,13 +9,15 @@ description: >-
   bursts and streaks survive), and re-runs the same rule on every past range.
   Prints the odds of target first, stop first, or neither by the time stop,
   where the price sits then, the average R before AND after costs, the real
-  history, and one honest verdict that weighs the costs, then hands off to
-  /meme-budget. Use when the user says "run the time machine", "replay this
-  trade", "what are the odds", "simulate this trade", "monte carlo",
-  "backtest this setup", "lohnt sich der trade", "wie stehen die chancen",
-  "is this a coin flip", or after /meme-exit writes a plan, before
-  /meme-budget.
-argument-hint: "[--days 3] [--block 10] [--replays 10000] [--seed 19]"
+  history, and one honest verdict that weighs the costs. Also: partial
+  takes and trailing stops, a comparison of 180 stop, target, hold and exit
+  combinations checked on days it never saw, a backtest across many coins,
+  and the chance your account halves. Use when the user says "run the time
+  machine", "replay this trade", "what are the odds", "backtest", "does
+  this work on other coins", "lohnt sich der trade", "wie stehen die
+  chancen", "risk of ruin", "kann ich pleite gehen", or after /meme-exit,
+  before /meme-budget.
+argument-hint: "[run | compare | multi | ruin] [--scale 1.5R:50] [--trail 1R]"
 ---
 
 # meme-timemachine
@@ -39,10 +41,16 @@ python3 "${CLAUDE_SKILL_DIR}/timemachine.py" run --write         # + meme/timema
 python3 "${CLAUDE_SKILL_DIR}/timemachine.py" run --days 2 --block 15
 python3 "${CLAUDE_SKILL_DIR}/timemachine.py" run --json
 python3 "${CLAUDE_SKILL_DIR}/timemachine.py" chart               # text fan chart of the saved run
+python3 "${CLAUDE_SKILL_DIR}/timemachine.py" run --scale 1.5R:50 --trail 1R   # with a partial take and a trailing stop
+python3 "${CLAUDE_SKILL_DIR}/timemachine.py" compare             # 180 combinations, checked on the unseen third
+python3 "${CLAUDE_SKILL_DIR}/timemachine.py" multi               # the rule on every coin in the watchlist
+python3 "${CLAUDE_SKILL_DIR}/timemachine.py" ruin --from-multi   # what those trades do to your account
 ```
 
 Other flags: `--plan FILE`, `--replays N`, `--seed N` (19), `--minutes N`
-(default: the plan's time stop), `--offline FILE` (saved 1-minute bars).
+(default: the plan's time stop), `--no-exits`, `--offline FILE` (saved
+1-minute bars; for `multi` a `{mint: {candles}}` bundle), `--tokens` (multi),
+`--trades 50` and `--runs 10000` (ruin), `--min-trades 8` (compare).
 
 ## What it reads and writes
 
@@ -52,6 +60,8 @@ Other flags: `--plan FILE`, `--replays N`, `--seed N` (19), `--minutes N`
 | Jupiter `datapi.jup.ag/v2/charts` | Solana: 1,000 one-minute bars a request, paged back 3 days (unofficial, free) |
 | GeckoTerminal `ohlcv/minute` | other chains, by pool |
 | `meme/timemachine.json` | with `--write`: `{plan, mc, history, verdict, notes, pool}`; `mc` holds the odds, the percentiles, the fan bands and 160 sample paths |
+| `meme/multi.json` | written by `multi`: per coin the trades and their R after costs; `ruin --from-multi` reads it |
+| `meme/config.json` | `budget_usd` and `max_loss_per_trade_usd` for `ruin` |
 
 ## How it works
 
@@ -73,11 +83,13 @@ Other flags: `--plan FILE`, `--replays N`, `--seed N` (19), `--minutes N`
    plan's round trip % / its risk %; every trade pays them.
 4. **The history.** The plan's own rule (the same range length, volume bar,
    wait, stop rule, target R and time stop) runs on every non-overlapping
-   range in those 3 days. That is what really happened, not a simulation.
+   range in those 3 days. That is what really happened, not a simulation. A
+   breakout whose stop would sit inside the round-trip costs is not counted
+   as a trade (meme-exit refuses those) and is reported apart.
 5. **The verdict** looks at the replays that hit a side and asks how often
    the target came first, against the break-even AFTER costs:
-   (1 + costs in R) / (1 + target R). At 3R with costs of 0.61R that is
-   40.2 %, not the 25 % a fee-free world would need. Less than 5 points
+   (1 + costs in R) / (1 + target R). At 3R with costs of 0.77R that is
+   44.3 %, not the 25 % a fee-free world would need. Less than 5 points
    from it: "Close to break-even after costs". 5 to 15: "Leans toward the
    target / stop". 15 or more: "Strongly toward". Under it: a line when over
    40 % hit neither, a line when the average R after costs points the other
@@ -88,6 +100,38 @@ same seed, same numbers on any machine. Say the seed with every result.
 
 **meme-risk reads this run.** With `require_edge` on (the example config),
 a trade whose replay shows a negative average R after costs is blocked.
+
+## Partial takes and trailing stops
+
+`--scale 1.5R:50` sells 50 % at 1.5R and moves the stop to the entry;
+`--trail 1R` keeps the stop 1R under the highest price since the entry (or
+both; meme-exit can write them into the plan). Within a bar the order is:
+the stop, then the partial take, then the target, then the trailing stop
+moves. A stop after a partial take or a trailing move is a "managed" exit.
+With exits like these the verdict is judged on the average R after costs.
+
+## Compare: what would have worked, checked on days it never saw
+
+`compare` runs 180 combinations (stops range-low, range-mid, 4, 6 and 8 %;
+targets 1.5, 2, 3 and 4R; time stops 30, 60 and 120 minutes; no extra exit,
+a partial take or a trailing stop) on the first two thirds of the days,
+ranks them, and shows each pick's result on the last third. The best pick
+in hindsight is usually luck; the unseen third says whether it held. If the
+top picks lose on the unseen third, say so and do not trade them.
+
+## Multi: the rule on many coins
+
+`multi` runs the plan's rule on every coin in `meme/watchlist.json` (or
+`--tokens`), each over its own last days, and adds the trades up. One coin
+can be lucky; a rule that loses across 10 coins does not work. It saves
+`meme/multi.json`.
+
+## Ruin: what it means for your account
+
+`ruin` draws 10,000 sequences of 50 trades from the real per-trade results
+(the plan's coin, or `--from-multi`) at your max loss per trade, and says how
+often the account fell to half on the way, how often it ended up, and where
+it ended. Reshuffled past trades, not a forecast.
 
 ## Steps
 
@@ -116,18 +160,25 @@ of the last 3.0 days (4,312 bars), seed 19.
   stop first      44.1 %
   neither         43.7 %   still open at 22:58 (the time stop)
   green           45.2 %   target first, or above the entry at 22:58
-  green after costs  34.0 %
+  green after costs  31.2 %
   Price at 22:58: median $0.0078366, 90 % of replays between $0.0069821 and $0.0088299.
-  Average R: +0.221 before costs, -0.387 after costs.
-History: the same rule on the last 3.0 days of real bars (120 ranges) fired 35 times: 3 target, 11 stop, 21 neither. Average R +0.032 before costs, -0.446 after.
-Strongly toward the stop: target first in 21.5 % of the decided replays, break-even after costs is 40.2 %.
+  Average R: +0.221 before costs, -0.551 after costs.
+History: the same rule on the last 3.0 days of real bars (126 ranges) fired 32 times: 3 target, 8 stop, 21 neither. Average R +0.127 before costs, -0.419 after. 5 more breakouts had a stop inside the costs (meme-exit refuses those).
+Strongly toward the stop: target first in 21.5 % of the decided replays, break-even after costs is 44.3 %.
 43.7 % of the replays hit neither by the time stop; the price then decides those.
-Costs take 0.61R a trade (2.60 % round trip on a 4.28 % risk).
+Costs take 0.77R a trade (3.30 % round trip on a 4.28 % risk).
 ```
 
-Before costs this setup was slightly positive on GATO (+0.22R replayed,
-+0.03R in 35 real trades). After costs it lost 0.39R and 0.45R a trade.
-That is the honest answer, and it is what the user hears before
+Before costs this setup was positive on GATO (+0.22R replayed, +0.13R in 32
+real trades). After Phantom's costs it lost 0.55R and 0.42R a trade.
+
+`compare` on the same bars: the best of 180 combinations in hindsight (8 %
+stop, 3R, 60 minutes, trailing 1R) made -0.144R on the first two thirds and
+-0.531R on the unseen third; none of the top 8 was positive there. `multi`
+on 11 coins of that evening: 52 trades, -0.599R a trade after costs, 3 of 11
+coins positive. `ruin --from-multi` with $111 and $3.30 a trade: in 96.1 %
+of 10,000 sequences of 50 trades the account fell to half or less; median
+end $11.38. That is the honest answer, and it is what the user hears before
 /meme-budget, and what meme-risk blocks on.
 
 ## Rules

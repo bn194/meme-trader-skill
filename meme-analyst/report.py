@@ -32,6 +32,13 @@ import urllib.request
 UA = "meme-trader-skill/1.0 (+https://github.com/bn194/meme-trader-skill)"
 DEX = "https://api.dexscreener.com/tokens/v1/%s/%s"
 RUGCHECK = "https://api.rugcheck.xyz/v1/tokens/%s/report"
+GOPLUS_SOL = "https://api.gopluslabs.io/api/v1/solana/token_security?contract_addresses=%s"
+GOPLUS_EVM = "https://api.gopluslabs.io/api/v1/token_security/%s?contract_addresses=%s"
+EVM_IDS = {"ethereum": 1, "bsc": 56, "base": 8453, "arbitrum": 42161, "polygon": 137, "avalanche": 43114}
+ZERO = ("0x0000000000000000000000000000000000000000", "0x000000000000000000000000000000000000dead")
+# Uniswap v4 keeps every pool's tokens in one PoolManager contract per chain: a pool, not a whale
+POOL_MANAGERS = ("0x000000000004444c5dc75cb358380d2e3de08a90", "0x498581ff718922c3f8e6a244956af099b2652b2b",
+                 "0x28e2ea090877bf75740558f6bfb36a5ffee9e9df")
 POOL_TYPES = ("AMM", "LOCKER", "POOL", "BURN")  # RugCheck knownAccounts types that are not people
 DEFAULTS = {"min_liquidity_usd": 50000, "min_pool_age_hours": 6, "min_holders": 1000,
             "max_top10_pct": 30, "max_single_holder_pct": 10, "max_creator_pct": 5,
@@ -172,7 +179,101 @@ def _num(x, default=None):
         return default
 
 
-def analyze(chain, address, pairs, rc, cfg, now):
+def goplus_result(gp, address):
+    """GoPlus answers {code, result: {address: {...}}}; pick ours (EVM addresses come back lowercased)."""
+    res = (gp or {}).get("result") or {}
+    for k, v in res.items():
+        if k.lower() == address.lower():
+            return v
+    return None
+
+
+def _on(v):
+    """GoPlus flags are "1"/"0" strings, or {"status": "1"} objects."""
+    if isinstance(v, dict):
+        v = v.get("status")
+    return str(v) == "1"
+
+
+def goplus_flags(chain, g, c, flag, pools=()):
+    """GoPlus as a second opinion (Solana) or the main contract check (Base, BSC, Ethereum...). -> metrics."""
+    gm = {"goplus": True}
+    if chain == "solana":
+        checks = (("mintable", "mint", "GoPlus: the supply can still be minted"),
+                  ("freezable", "freeze", "GoPlus: accounts can still be frozen"),
+                  ("balance_mutable_authority", "balance", "GoPlus: an authority can change balances"),
+                  ("closable", "closable", "GoPlus: the token can be closed"))
+        for key, code, text in checks:
+            if _on(g.get(key)):
+                flag("avoid", "goplus_" + code, text)
+        if str(g.get("non_transferable")) == "1":
+            flag("avoid", "goplus_frozen", "GoPlus: the token cannot be transferred")
+        if g.get("transfer_fee"):
+            flag("avoid", "goplus_fee", "GoPlus: a transfer fee is set")
+        if g.get("transfer_hook"):
+            flag("caution", "goplus_hook", "GoPlus: a transfer hook runs on every transfer")
+        gm["goplus_holders"] = int(g.get("holder_count") or 0) or None
+        return gm
+    tax_b = float(g.get("buy_tax") or 0) * 100
+    tax_s = float(g.get("sell_tax") or 0) * 100
+    gm.update(buy_tax_pct=round(tax_b, 2), sell_tax_pct=round(tax_s, 2), holders=int(g.get("holder_count") or 0) or None,
+              owner=g.get("owner_address"), open_source=g.get("is_open_source") == "1")
+    if _on(g.get("is_honeypot")) or _on(g.get("cannot_sell_all")) or _on(g.get("cannot_buy")):
+        flag("avoid", "honeypot", "GoPlus: a honeypot, you cannot sell (or not all of it)")
+    if tax_b > 10 or tax_s > 10:
+        flag("avoid", "tax", "GoPlus: buy tax %.1f%%, sell tax %.1f%%" % (tax_b, tax_s))
+    elif tax_b > 0 or tax_s > 0:
+        flag("caution", "tax", "GoPlus: buy tax %.1f%%, sell tax %.1f%%: add it to your costs" % (tax_b, tax_s))
+    if g.get("is_open_source") != "1":
+        flag("avoid", "closed_source", "GoPlus: the contract code is not verified")
+    for key, text in (("hidden_owner", "a hidden owner"), ("can_take_back_ownership", "ownership can be taken back"),
+                      ("owner_change_balance", "the owner can change balances"),
+                      ("transfer_pausable", "transfers can be paused"), ("is_blacklisted", "wallets can be blacklisted"),
+                      ("slippage_modifiable", "the tax can be changed"), ("selfdestruct", "the contract can self-destruct")):
+        if _on(g.get(key)):
+            flag("avoid", key, "GoPlus: %s" % text)
+    if _on(g.get("is_mintable")):
+        flag("avoid", "mint", "GoPlus: new tokens can be minted")
+    owner = (g.get("owner_address") or "").lower()
+    if owner and owner not in ZERO:
+        flag("caution", "owner", "GoPlus: the owner (%s) has not renounced the contract" % owner)
+    lps = g.get("lp_holders") or []
+    if lps:
+        locked = 0.0
+        for h in lps:
+            pct = float(h.get("percent") or 0) * 100
+            if _on(h.get("is_locked")) or (h.get("address") or "").lower() in ZERO or "dead" in (h.get("tag") or "").lower() \
+                    or "null" in (h.get("tag") or "").lower():
+                locked += pct
+        gm["lp_locked_pct"] = round(locked, 1)
+        if locked < float(c["min_lp_locked_pct"]):
+            flag("avoid", "lp_unlocked", "GoPlus: only %.0f%% of the LP is locked or burned: the liquidity can be pulled" % locked)
+    skip = set(a.lower() for a in pools) | set(POOL_MANAGERS) | set(ZERO)
+    holders = [h for h in (g.get("holders") or []) if (h.get("address") or "").lower() not in skip and not _on(h.get("is_locked"))]
+    top10 = sum(float(h.get("percent") or 0) * 100 for h in holders[:10])
+    gm["top10_pct"] = round(top10, 2)
+    if top10 > float(c["max_top10_pct"]):
+        flag("avoid", "top10", "GoPlus: the top 10 wallets hold %.1f%%" % top10)
+    creator = float(g.get("creator_percent") or 0) * 100
+    gm["creator_pct"] = round(creator, 2)
+    if creator > float(c["max_creator_pct"]):
+        flag("avoid", "creator", "GoPlus: the creator still holds %.1f%%" % creator)
+    if gm.get("holders") is not None and gm["holders"] < int(c["min_holders"]):
+        flag("caution", "holders", "%s holders, under your %s minimum" % (gm["holders"], c["min_holders"]))
+    return gm
+
+
+def holder_trend(history, now, holders):
+    """history: [[ts, holders], ...] from earlier checks -> (change, hours since) against the oldest in the last day."""
+    old = [h for h in (history or []) if now - 86400 <= h[0] < now - 60 and h[1]]
+    if not old or not holders:
+        return None
+    ts, n = old[0]
+    return {"since": ts, "before": n, "change": holders - n, "pct": (holders / float(n) - 1) * 100,
+            "hours": (now - ts) / 3600.0}
+
+
+def analyze(chain, address, pairs, rc, cfg, now, gp=None, holder_history=None):
     """Pure function: the DexScreener pairs and the RugCheck report -> the report dict."""
     c = dict(DEFAULTS)
     c.update({k: v for k, v in (cfg or {}).items() if v is not None})
@@ -326,26 +427,42 @@ def analyze(chain, address, pairs, rc, cfg, now):
             text = "RugCheck: %s%s" % (r.get("name"), (" (%s)" % r["value"]) if r.get("value") else "")
             if text not in seen:
                 flag(lvl, "rugcheck", text)
-    elif chain == "solana":
-        flag("avoid", "no_report", "no RugCheck report: mint, freeze and holder checks could not run")
-    else:
-        flag("caution", "unverified", "no on-chain report for %s in this pack: mint, holder and LP checks did not "
-             "run, so check the contract yourself" % chain)
+    g = goplus_result(gp, address) if gp else None
+    gm = {}
+    if g:
+        gm = goplus_flags(chain, g, c, flag, [p.get("pairAddress") or "" for p in pairs or []])
+    if not rc and chain == "solana" and not g:
+        flag("avoid", "no_report", "no RugCheck or GoPlus report: mint, freeze and holder checks could not run")
+    elif not rc and chain == "solana":
+        flag("caution", "no_rugcheck", "no RugCheck report: LP lock, insiders and the creator's bag were not checked")
+    elif not rc and not g:
+        flag("caution", "unverified", "no contract report for %s: mint, tax, holder and LP checks did not run, so "
+             "check the contract yourself" % chain)
+    holders_now = (rcm.get("holders") if rcm else None) or gm.get("holders")
+    trend = holder_trend(holder_history, now, holders_now)
+    if trend:
+        m["holder_trend"] = trend
+        if trend["pct"] <= -3:
+            flag("caution", "holders_falling", "holders fell %.1f%% (%+d) in the last %.1f hours: people are leaving" % (
+                trend["pct"], trend["change"], trend["hours"]))
 
     n_avoid = sum(1 for f in flags if f["level"] == "avoid")
     n_caution = sum(1 for f in flags if f["level"] == "caution")
     if n_avoid:
         verdict = "AVOID"
-    elif not rc:
+    elif not rc and not g:
         verdict = "UNVERIFIED"
     elif n_caution:
         verdict = "CAUTION"
     else:
         verdict = "PASS"
+    for k, v in gm.items():
+        if k not in rcm or rcm.get(k) is None:
+            m[k] = v
     m.update(rcm)
     return {"as_of": now, "chain": chain, "address": address, "symbol": symbol, "name": name,
             "metrics": m, "flags": flags, "verdict": verdict, "avoid": n_avoid, "caution": n_caution,
-            "sources": ["DexScreener"] + (["RugCheck"] if rc else [])}
+            "sources": ["DexScreener"] + (["RugCheck"] if rc else []) + (["GoPlus"] if g else [])}
 
 
 # ---------------------------------------------------------------- output
@@ -380,15 +497,26 @@ def render(rep, tz):
     out.append("Liquidity")
     out.append("  main pool        %s on %s, $%s liquidity" % (m.get("pair") or "none", m.get("dex") or "?", _k(m.get("liquidity_usd"))))
     if m.get("lp_locked_pct") is not None:
-        out.append("  LP locked/burned %.0f%% (%s)" % (m["lp_locked_pct"], m.get("main_market")))
+        out.append("  LP locked/burned %.0f%% (%s)" % (m["lp_locked_pct"], m.get("main_market") or "GoPlus"))
     if m.get("pool_age_hours") is not None:
         age = m["pool_age_hours"]
         out.append("  pool age         %s" % ("%.1f hours" % age if age < 48 else "%.0f days" % (age / 24)))
+    if m.get("buy_tax_pct") is not None:
+        out.append("Contract (GoPlus)")
+        out.append("  tax              buy %.1f%%, sell %.1f%%; code %s; owner %s" % (
+            m["buy_tax_pct"], m["sell_tax_pct"], "verified" if m.get("open_source") else "NOT verified",
+            "renounced" if (m.get("owner") or "").lower() in ZERO or not m.get("owner") else m["owner"]))
     if "holders" in m:
         out.append("Holders")
-        out.append("  holders          %s" % ("{:,}".format(m["holders"]) if m["holders"] is not None else "n/a"))
-        out.append("  top 10           %.1f%% (pools left out), largest %.1f%%" % (m["top10_pct"], m["largest_holder_pct"]))
-        out.append("  creator          %.2f%%   insiders %.2f%% in %d networks" % (m["creator_pct"], m["insider_pct"], m["insider_networks"]))
+        tr = m.get("holder_trend")
+        out.append("  holders          %s%s" % ("{:,}".format(m["holders"]) if m["holders"] is not None else "n/a",
+                                             ("   %+d (%+.1f%%) since %s" % (tr["change"], tr["pct"], local_str(tr["since"], tz, "%H:%M")))
+                                             if tr else ""))
+        if "largest_holder_pct" in m:
+            out.append("  top 10           %.1f%% (pools left out), largest %.1f%%" % (m["top10_pct"], m["largest_holder_pct"]))
+            out.append("  creator          %.2f%%   insiders %.2f%% in %d networks" % (m["creator_pct"], m["insider_pct"], m["insider_networks"]))
+        elif m.get("top10_pct") is not None:
+            out.append("  top 10           %.1f%%, creator %.2f%%" % (m["top10_pct"], m.get("creator_pct") or 0))
     out.append("Trading")
     pc = m.get("price_change") or {}
     out.append("  market cap       $%s   24h volume $%s (%sx liquidity)" % (_k(m.get("market_cap")), _k(m.get("volume_h24")),
@@ -414,6 +542,13 @@ def render(rep, tz):
 def write(rep):
     base = mdir()
     save(os.path.join(base, "analyst", "%s.json" % rep["address"]), rep)
+    hp = os.path.join(base, "state", "holders.json")
+    hist = load(hp, {}) or {}
+    n = rep["metrics"].get("holders")
+    if n:
+        rows = [r for r in hist.get(rep["address"], []) if rep["as_of"] - r[0] <= 7 * 86400] + [[rep["as_of"], n]]
+        hist[rep["address"]] = rows[-200:]
+        save(hp, hist)
     path = os.path.join(base, "safety.json")
     idx = load(path, {}) or {}
     m = rep["metrics"]
@@ -435,6 +570,8 @@ def main(argv=None):
     ap.add_argument("--now", help='pin the clock, "YYYY-MM-DD HH:MM" in your time zone')
     ap.add_argument("--offline-dex", help="a saved DexScreener tokens/v1 JSON")
     ap.add_argument("--offline-rugcheck", help="a saved RugCheck report JSON")
+    ap.add_argument("--offline-goplus", help="a saved GoPlus token_security JSON")
+    ap.add_argument("--no-goplus", action="store_true", help="skip GoPlus")
     a = ap.parse_args(argv)
     cfg = load(os.path.join(mdir(), "config.json"), {}) or {}
     tz = cfg.get("timezone") or DEFAULTS["timezone"]
@@ -462,7 +599,17 @@ def main(argv=None):
                     rc = get_json(RUGCHECK % address)
                 except AnalystError as e:
                     print("RugCheck: %s" % e, file=sys.stderr)
-            rep = analyze(chain, address, pairs if isinstance(pairs, list) else (pairs or {}).get("pairs"), rc, cfg, now)
+            gp = None
+            if a.offline_goplus:
+                gp = load(a.offline_goplus)
+            elif not a.no_goplus and (chain == "solana" or chain in EVM_IDS):
+                try:
+                    gp = get_json(GOPLUS_SOL % address if chain == "solana" else GOPLUS_EVM % (EVM_IDS[chain], address))
+                except AnalystError as e:
+                    print("GoPlus: %s" % e, file=sys.stderr)
+            hh = (load(os.path.join(mdir(), "state", "holders.json"), {}) or {}).get(address)
+            rep = analyze(chain, address, pairs if isinstance(pairs, list) else (pairs or {}).get("pairs"), rc, cfg, now,
+                          gp, hh)
             reports.append(rep)
             if a.write:
                 write(rep)

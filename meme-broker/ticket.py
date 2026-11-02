@@ -60,12 +60,22 @@ DOUBT_WORDS = {"no", "not", "dont", "don't", "wait", "cancel", "stop", "but", "m
                "falls", "wenn", "doch", "kein", "keine"}
 VENUES = {"fomo": "Fomo", "phantom": "Phantom", "jupiter": "Jupiter", "axiom": "Axiom", "photon": "Photon",
           "bullx": "BullX", "pumpfun": "pump.fun", "solflare": "Solflare", "trojan": "Trojan"}
-DEFAULTS = {"timezone": "Europe/Berlin", "paper": True, "venue": "fomo", "budget_usd": 1000, "fee_pct": 0.5,
-            "fee_min_usd": 0.95, "slippage_pct": 0.3, "pool_fee_pct": 0.5, "slippage_bps": 150}
+DEFAULTS = {"timezone": "Europe/Berlin", "paper": True, "venue": "phantom", "budget_usd": 111, "fee_pct": 0.85,
+            "fee_min_usd": 0, "slippage_pct": 0.3, "pool_fee_pct": 0.5, "slippage_bps": 150}
 
 
 class TicketError(Exception):
     pass
+
+def apply_venue(cfg):
+    """The venue's fee profile (config "venues") wins over the plain fee_pct and fee_min_usd."""
+    v = (cfg.get("venues") or {}).get(str(cfg.get("venue", "")).lower())
+    if v:
+        cfg = dict(cfg)
+        cfg["fee_pct"] = float(v.get("fee_pct", cfg.get("fee_pct", 0.85)))
+        cfg["fee_min_usd"] = float(v.get("fee_min_usd") or 0)
+    return cfg
+
 
 
 # ---------------------------------------------------------------- files and time
@@ -361,6 +371,7 @@ def main(argv=None):
     a = ap.parse_args(argv)
     cfg = dict(DEFAULTS)
     cfg.update({k: v for k, v in (load(os.path.join(mdir(), "config.json"), {}) or {}).items() if v is not None})
+    cfg = apply_venue(cfg)
     tz = cfg["timezone"]
     now = parse_now(a.now, tz)
     today = local_str(now, tz, "%Y-%m-%d")
@@ -485,7 +496,8 @@ def run(a, cfg, tz, now, today):
         add_event({"type": "placed", "at": now, "fp": fingerprint(o), "index": a.index, "token": o["token"],
                    "symbol": o.get("symbol"), "side": "buy", "amount_usd": o["amount_usd"], "tokens": tokens,
                    "price": price, "max_loss": p.get("max_loss"), "tx": getattr(a, "tx", None),
-                   "paper": a.cmd == "paper"})
+                   "paper": a.cmd == "paper", "spent_usd": round(spent, 2), "setup": p.get("setup"),
+                   "venue": o.get("venue"), "stop": p.get("stop"), "target": p.get("target")})
         print("%s: bought %s %s at $%s for %s. Cash left %s." % (
             "PAPER fill" if a.cmd == "paper" else "Recorded", "{:,.1f}".format(tokens), o.get("symbol"), fp(price),
             money(spent), money(port["cash_usd"])))

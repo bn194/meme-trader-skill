@@ -237,7 +237,7 @@ def mine():
     return held, watched
 
 
-def check(chain, wallets, state, limit, tz):
+def check(chain, wallets, state, limit, tz, window=1800):
     nm = names()
     held, watched = mine()
     sol_px = ((load(os.path.join(mdir(), "prices.json"), {}) or {}).get("SOL") or {}).get("price")
@@ -276,14 +276,46 @@ def check(chain, wallets, state, limit, tz):
                                "usd": round(abs(paid) * sol_px, 2) if sol_px and abs(paid) > 0.001 else None,
                                "signature": sig, "flags": flags})
     state["seen"] = state["seen"][-5000:]
+    clusters = find_clusters(alerts, state, window)
     alerts.sort(key=lambda r: (-(1 if any(f.startswith("DEV") for f in r["flags"]) else 0), -(r["time"] or 0)))
-    return alerts
+    return alerts, clusters
 
 
-def render(alerts, tz, n_wallets):
+def find_clusters(alerts, state, window=1800):
+    """Two or more of your wallets buying the same coin within `window` seconds (this check and the last ones)."""
+    recent = [r for r in state.get("recent_buys", []) if r[0] and r[0] >= max(a["time"] or 0 for a in alerts) - 86400] \
+        if alerts else list(state.get("recent_buys", []))
+    for a in alerts:
+        if a["action"] == "BUY" and a["time"]:
+            recent.append([a["time"], a["wallet"], a["mint"], a.get("symbol"), a.get("label")])
+    state["recent_buys"] = recent[-2000:]
+    out = []
+    by_mint = {}
+    for r in recent:
+        by_mint.setdefault(r[2], []).append(r)
+    for mint, rows in by_mint.items():
+        rows.sort(key=lambda r: r[0])
+        for i in range(len(rows)):
+            group = [r for r in rows if rows[i][0] <= r[0] <= rows[i][0] + window]
+            wallets = sorted(set(r[1] for r in group))
+            if len(wallets) >= 2:
+                out.append({"mint": mint, "symbol": group[0][3], "wallets": wallets,
+                            "labels": sorted(set(r[4] or r[1][:8] for r in group)), "first": group[0][0],
+                            "last": group[-1][0]})
+                break
+    return out
+
+
+def render(alerts, tz, n_wallets, clusters=()):
+    out = []
+    for c in clusters or []:
+        out.append("CLUSTER: %d of your wallets bought %s within %d minutes (%s): %s" % (
+            len(c["wallets"]), c.get("symbol") or c["mint"], max(1, int((c["last"] - c["first"]) / 60)),
+            ", ".join(c["labels"]), c["mint"]))
     if not alerts:
-        return "Nothing new from %d wallet%s." % (n_wallets, "" if n_wallets == 1 else "s")
-    out = ["%d new from %d wallet%s, newest first (dev alerts on top):" % (len(alerts), n_wallets, "" if n_wallets == 1 else "s")]
+        out.append("Nothing new from %d wallet%s." % (n_wallets, "" if n_wallets == 1 else "s"))
+        return "\n".join(out)
+    out.append("%d new from %d wallet%s, newest first (dev alerts on top):" % (len(alerts), n_wallets, "" if n_wallets == 1 else "s"))
     for r in alerts:
         amt = "{:,.2f}".format(abs(r["amount"]))
         coin = r["symbol"] or (r["mint"][:6] + "..")
@@ -310,6 +342,9 @@ def main(argv=None):
     p = sub.add_parser("dev")
     p.add_argument("token", help="the coin's contract address")
     p.add_argument("--offline-rugcheck")
+    p = sub.add_parser("import")
+    p.add_argument("file", help="one wallet a line, optionally followed by a comma and a label")
+    p.add_argument("--role", choices=("dev", "whale", "smart", "other"), default="smart")
     p = sub.add_parser("remove")
     p.add_argument("wallet")
     sub.add_parser("list")
@@ -358,6 +393,25 @@ def main(argv=None):
             print("Watching the creator of %s: %s. A sell or a transfer of %s from it rings first." % (
                 sym or a.token, creator, sym or "the coin"))
             return 0
+        if a.cmd == "import":
+            added = 0
+            with open(a.file, encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    addr, _, label = line.partition(",")
+                    addr = addr.strip()
+                    if not ADDRESS.match(addr):
+                        print("skipped (not a Solana address): %s" % addr)
+                        continue
+                    book["wallets"] = [w for w in book["wallets"] if w["address"] != addr]
+                    book["wallets"].append({"address": addr, "label": label.strip() or None, "role": a.role,
+                                            "added_at": int(time.time())})
+                    added += 1
+            save(wpath, book)
+            print("Imported %d wallets (%d watched in all)." % (added, len(book["wallets"])))
+            return 0
         if a.cmd == "remove":
             n = len(book["wallets"])
             book["wallets"] = [w for w in book["wallets"] if w["address"] != a.wallet]
@@ -376,10 +430,11 @@ def main(argv=None):
         spath = os.path.join(base, "state", "whales.json")
         state = load(spath, {"last_sig": {}, "seen": []}) or {"last_sig": {}, "seen": []}
         chain = Chain(cfg.get("solana_rpc") or RPC, a.offline)
-        alerts = check(chain, book["wallets"], state, a.limit, tz)
+        alerts, clusters = check(chain, book["wallets"], state, a.limit, tz)
         if not a.no_write:
             save(spath, state)
-        print(json.dumps(alerts, indent=2) if a.json else render(alerts, tz, len(book["wallets"])))
+        print(json.dumps({"alerts": alerts, "clusters": clusters}, indent=2) if a.json
+              else render(alerts, tz, len(book["wallets"]), clusters))
         return 0
     except WhaleError as e:
         print("Whales: %s" % e)

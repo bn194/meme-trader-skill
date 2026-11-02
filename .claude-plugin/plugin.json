@@ -1,7 +1,7 @@
 {
   "name": "meme-trader-skill",
-  "description": "11 Claude skills for meme coin trading: scan the coins in play, rug-check every one, time every entry and exit, and replay every outcome after fees before you risk a dollar.",
-  "version": "1.0.0",
+  "description": "13 Claude skills for meme coin trading: scan the coins in play, catch new launches the second they go live, rug-check every one, time every entry and exit, replay every outcome after fees before you risk a dollar, and keep an honest journal of the real trades.",
+  "version": "2.0.0",
   "author": {
     "name": "bn194",
     "url": "https://github.com/bn194"
@@ -10,14 +10,17 @@
   "repository": "https://github.com/bn194/meme-trader-skill",
   "license": "MIT",
   "keywords": [
+    "backtesting",
     "claude-code",
     "claude-skills",
-    "meme-coins",
-    "solana",
-    "rug-check",
     "dexscreener",
-    "backtesting",
-    "paper-trading"
+    "launch-radar",
+    "meme-coins",
+    "paper-trading",
+    "pump-fun",
+    "rug-check",
+    "solana",
+    "trade-journal"
   ],
   "skills": "./"
 }

@@ -7,12 +7,14 @@ description: >-
   straight from a Solana RPC node, turns each new one into a plain row (who,
   buy or sell or transfer, how many tokens of which coin, how much SOL) and
   alerts once per transaction. A dev wallet that sells or moves its own coin
-  is flagged first, because that is how many rugs start. Flags trades in
-  coins you hold or watch. Read only. Use when the user says "watch the dev",
+  is flagged first, because that is how many rugs start. When two or more of
+  your wallets buy the same coin within 30 minutes it rings a CLUSTER. Flags
+  trades in coins you hold or watch, and imports a list of wallets (for
+  example top traders from a public leaderboard). Read only. Use when the user says "watch the dev",
   "track this wallet", "did the dev sell", "what are whales buying", "smart
   money", "beobachte die dev wallet", "hat der dev verkauft", "wal
   tracker", "copy trade" (to explain why not), or after /meme-analyst.
-argument-hint: "[dev MINT | add WALLET | check]"
+argument-hint: "[dev MINT | add WALLET | import FILE | check]"
 ---
 
 # meme-whales
@@ -37,6 +39,7 @@ python3 "${CLAUDE_SKILL_DIR}/whales.py" add WALLET --label "GATO #2 holder"
 python3 "${CLAUDE_SKILL_DIR}/whales.py" add WALLET --label "known trader" --role smart
 python3 "${CLAUDE_SKILL_DIR}/whales.py" check                       # new transactions since the last check
 python3 "${CLAUDE_SKILL_DIR}/whales.py" check --limit 20 --json
+python3 "${CLAUDE_SKILL_DIR}/whales.py" import wallets.txt --role smart   # one address a line, ", label" optional
 python3 "${CLAUDE_SKILL_DIR}/whales.py" list
 python3 "${CLAUDE_SKILL_DIR}/whales.py" remove WALLET
 ```
@@ -75,12 +78,29 @@ pauses between calls and waits on a 429. For more than a few wallets, put a
 free RPC endpoint of your own in `meme/config.json` as `"solana_rpc"` (it
 lives in that file only, never in the chat).
 
+## Top traders and clusters
+
+There is no free official list of the best meme coin traders. Public
+leaderboards (Kolscan, GMGN, Cielo and others) show wallet addresses; the
+user copies the ones they want into a text file and imports it. A single
+wallet's buy says little (they often hold several wallets and sell into the
+people who follow them). Two or more of your wallets buying the same coin
+within 30 minutes is a stronger fact, so `check` puts a CLUSTER line on top:
+
+```
+CLUSTER: 2 of your wallets bought MEME within 10 minutes (a, b): MINT
+```
+
+Still a fact, not a signal: they bought before you saw it, and the price
+has moved since.
+
 ## Steps
 
 1. After `/meme-analyst MINT`, offer `whales.py dev MINT` for any coin the
-   user trades or holds. Add big holders by hand when the user asks.
-2. `whales.py check`. Lead with any DEV line, then rows in coins the user
-   holds, then the rest.
+   user trades or holds. Add big holders by hand when the user asks, or
+   `import` a list.
+2. `whales.py check`. Lead with any DEV line and any CLUSTER line, then rows
+   in coins the user holds, then the rest.
 3. A DEV SOLD in a coin the user holds: say it plainly and point to the way
    out (`/meme-broker flatten`), but the decision is theirs.
 4. On a schedule or a `/loop` (every few minutes while a trade is open), it

@@ -1,63 +1,70 @@
 ---
 name: meme-radar
 description: >-
-  Launch Radar. Listens to every new pump.fun coin the second it is created
-  and to every coin that graduates to a real pool, through PumpPortal's free
-  websocket (no key). Each new coin gets an instant check (how much the dev
-  bought, a serial launcher, a copycat or a copy race of the same ticker,
-  junk names); the ones that pass get a second look after 90 seconds on
-  DexScreener (buyers, sellers, volume, the move) and in their metadata
-  (website, X, Telegram), and are printed as HOT or WATCH with every reason.
-  A coin that graduates seconds after launch is flagged as BUNDLED (insiders
-  bought the whole curve). It never buys. Use when the user says "check new
-  coins", "neue coins sofort checken", "snipe", "frische coins", "was wurde
-  gerade gelauncht", "new pump.fun launches", "launch radar", "what just
-  graduated", "radar an", or wants coins earlier than the scanner sees them.
-argument-hint: "[--minutes 10 | --forever] [--graduations-only] [show]"
+  Launch Radar with a BUY or SKIP for every new coin in seconds. Listens to
+  every new pump.fun coin the second it is created and to every graduation,
+  through PumpPortal's free websocket (no key). At birth it throws out the
+  obvious traps (a big dev buy, a serial launcher, a copycat or a copy race,
+  junk names); at 10 seconds Jupiter's token data rules out the rest of the
+  traps (active authorities, Mayhem mode, a dev with many earlier coins, the
+  dev's bag, snipers, insiders, bundlers, an instant graduation); at 30
+  seconds it decides on the first trading (traders, holders, money bought,
+  buys against sells, the move, the top 10). Every BUY is a 5-euro paper
+  trade first: the radar follows it as if you bought it 45 s later and sold
+  at the stop, the target or the time stop 45 s after the alarm, after your
+  app's fee, pump.fun's 1.25 % and slippage, and after 50 signals says
+  PASSED or FAILED. It never buys. Use when the user says "check new coins",
+  "neue coins sofort checken", "kaufen oder nicht", "snipe", "frische
+  coins", "was wurde gerade gelauncht", "launch radar", "radar an", "paper
+  test", "wie läuft der test", or wants coins earlier than the scanner sees
+  them.
+argument-hint: "[--minutes 10 | --forever] [--quiet] [test | show]"
 ---
 
 # meme-radar
 
 The Launch Radar is the earliest look this pack has: a coin is on screen
-within a second of its creation. Be clear about what that second is worth.
-In the first seconds a coin has no buyers, no pool, no holders, only a name,
-a picture and the dev's own buy. About 1 % of pump.fun coins ever graduate
-from the bonding curve; most are dead within the hour. The very first buyers
-are bots that buy in the same block. A human who says "buy" after reading a
-line is never first, and does not need to be: the radar's job is to throw
-out the obvious traps fast and show the few coins that survived their first
-minutes with real buyers.
+within a second of its creation and has a verdict, BUY or SKIP, about 30
+seconds later. Be clear about what those seconds are worth. In the first
+seconds a coin has no buyers, no pool and few holders. About 1 % of pump.fun
+coins ever graduate from the bonding curve; most are dead within the hour.
+The very first buyers are bots in the same block. A human on a phone needs
+15 to 60 seconds from a line to a filled buy, and the paper test counts
+exactly that delay.
 
 `${CLAUDE_SKILL_DIR}` below is this skill's folder (where this SKILL.md lives).
 
 ```bash
-python3 "${CLAUDE_SKILL_DIR}/radar.py"                      # listen 10 minutes
-python3 "${CLAUDE_SKILL_DIR}/radar.py" --minutes 60
-python3 "${CLAUDE_SKILL_DIR}/radar.py" --forever            # until stopped
-python3 "${CLAUDE_SKILL_DIR}/radar.py" --graduations-only   # only coins that reached a real pool
-python3 "${CLAUDE_SKILL_DIR}/radar.py" --delay 120 --min-buys 30 --min-volume 5000 --max-dev-buy 5
+python3 "${CLAUDE_SKILL_DIR}/radar.py"                      # listen 10 minutes, a line for every coin
+python3 "${CLAUDE_SKILL_DIR}/radar.py" --minutes 60 --quiet # only BUY lines, graduations, paper results
+python3 "${CLAUDE_SKILL_DIR}/radar.py" --forever --quiet    # until stopped
+python3 "${CLAUDE_SKILL_DIR}/radar.py" test                 # the paper test so far
 python3 "${CLAUDE_SKILL_DIR}/radar.py" show                 # the last coins it saw, with reasons
+python3 "${CLAUDE_SKILL_DIR}/radar.py" --graduations-only   # only coins that reached a real pool
+python3 "${CLAUDE_SKILL_DIR}/radar.py" --decide 45 --min-traders 25 --min-volume 2000
 ```
 
-Other flags: `--save FILE` (record the stream and every lookup), `--offline
-FILE` (replay a recording), `--no-write`.
+Other flags: `--max-dev-buy 5`, `--save FILE` (record the stream and every
+lookup), `--offline FILE` (replay a recording; it never touches the paper
+test), `--no-write`.
 
 ## What it reads and writes
 
 | source / file | what |
 | --- | --- |
 | PumpPortal `wss://pumpportal.fun/api/data` | `subscribeNewToken` (every new pump.fun coin) and `subscribeMigration` (graduations), free. Per-trade streams need a paid key; the radar does not use them |
-| DexScreener `tokens/v1/solana/{mint}` | buys, sells, volume, change and market cap in the coin's first minutes |
-| the coin's metadata (IPFS, two public gateways) | website, X and Telegram links |
+| Jupiter `datapi.jup.ag/v1/assets/search` | free, no key, up to 50 coins a request, about 0.2 s: price, liquidity, holders, the audit (mint and freeze authority, the dev's bag, how many coins the dev launched and how many graduated, snipers, insiders, bundlers, top 10) and the first minutes of trading (traders, buys, sells, money bought, the move) |
+| Jupiter `lite-api.jup.ag/price/v3` | SOL and EURC in USD, once at the start (for the SOL amount and the euro line) |
 | `meme/watchlist.json`, `meme/universe.json` | tickers already in play: a new coin with one of them is a copycat |
-| `meme/config.json` | `radar_delay_seconds` (90), `radar_min_buys` (20), `radar_min_volume_usd` (3,000), `radar_max_dev_buy_pct` (10), `timezone` |
-| `meme/radar.json` | the last 500 coins with their status and reasons (`show` prints them) |
+| `meme/config.json` | the `fresh_*` rules below, `radar_max_dev_buy_pct` (10), `venue` and `venues` (the app's fee), `slippage_pct`, `eur_usd_fallback`, `testphase_min_profit_factor`, `timezone` |
+| `meme/fresh.json` | every paper trade: signal, fill, path, exit, result after costs |
+| `meme/radar.json` | the last 500 coins with their verdict and reasons (`show` prints them) |
 
-## The checks
+## The rules
 
-At birth, no network (a coin with any of these is out):
+At birth, no network (SKIP):
 
-| check | out when |
+| check | SKIP when |
 | --- | --- |
 | dev buy | the creator bought more than `radar_max_dev_buy_pct` (10 %) of the supply in the launch |
 | serial launcher | the same wallet created 3 or more coins since the radar started |
@@ -65,58 +72,119 @@ At birth, no network (a coin with any of these is out):
 | copy race | the same ticker was launched before in this session: copies of copies, they usually die |
 | junk | test, rug, scam, honeypot, airdrop, claim, free in the name, or no readable ticker |
 
-After `radar_delay_seconds` (90): HOT needs at least `radar_min_buys` buys
-in 5 minutes, at least `radar_min_volume_usd` of volume, not twice as many
-sells as buys, not down 30 % or more (dumped), and a website, X or Telegram
-link in its metadata. One miss with real buyers: WATCH. More: skipped.
+At `fresh_first_look_seconds` (10), Jupiter's audit (SKIP), checked again at the verdict:
+
+| check | SKIP when |
+| --- | --- |
+| authorities | mint or freeze authority still active |
+| Mayhem mode | pump.fun's AI agent trades the coin for its first 24 hours, so its buys are partly that bot |
+| serial dev | the dev has launched more than `fresh_max_dev_mints` (5) coins, this one included |
+| the dev's bag | the dev holds more than `fresh_max_dev_pct` (10 %), or already sold (holds under a tenth of the launch buy) |
+| snipers, insiders, bundlers | over `fresh_max_sniper_pct` (15 %), `fresh_max_insider_pct` (15 %), `fresh_max_bundler_pct` (10 %) |
+| instant graduation | it graduated within 5 minutes of its launch: insiders bought the whole curve |
+
+At `fresh_decide_seconds` (30), BUY needs all of: at least
+`fresh_min_traders` (15) traders and `fresh_min_holders` (15) holders, at
+least `fresh_min_buy_volume_usd` ($1,000) bought, no more sells than buys,
+not down 30 % or more, liquidity not down 20 % or more, the top 10 wallets
+at most `fresh_max_top10_pct` (40 %), and a price. Anything else is SKIP
+with every reason. No data from Jupiter 8 seconds after a look: SKIP.
 
 Graduations: `GRADUATED` with how long it took. A coin that graduates within
-5 minutes of its launch is `BUNDLED`: the whole curve was bought in a few
-transactions, so insiders hold most of the supply. Stay away from those.
+5 minutes of its launch is `BUNDLED`.
+
+## The paper test
+
+Every BUY is a paper trade of `fresh_max_order_eur` (5 EUR) until the test
+is done. The radar follows it with a price every `fresh_poll_seconds` (10):
+
+- **The fill:** the price `fresh_fill_delay_seconds` (45 s) after the
+  signal, not the price at the signal. That is the time from a line on a
+  phone to a filled buy.
+- **The exits:** a stop at `fresh_stop_pct` (-25 %) and a target at
+  `fresh_target_pct` (+50 %) from that fill, and a time stop after
+  `fresh_hold_minutes` (10). Each one fills at the price 45 s after the
+  alarm, so a stop that gaps fills far below -25 %.
+- **The costs:** your app's fee each way (with its minimum: Fomo's $0.95 is
+  17 % of a 5-euro trade, the radar warns), pump.fun's
+  `fresh_curve_fee_pct` (1.25 %) each way and `slippage_pct`. About 4.8 % a
+  round trip in Phantom. The token account's rent (about 0.002 SOL) comes
+  back when the empty account is closed and is not counted.
+- **No price for two minutes:** counted as a total loss, the safe
+  assumption. A paper trade that was running when the radar stopped is not
+  counted (its outcome is unknown); `test` says how many.
+
+After `fresh_test_signals` (50) closed signals, in order, `radar.py test`
+says **PASSED** (money made after costs and a profit factor of at least
+`testphase_min_profit_factor`, 1.2) or **FAILED**. Under 50 it says how many
+are closed and that luck dominates. The rule is fixed before the test; the
+test never picks the best of several rules.
 
 ## Steps
 
-1. In a session, run it in the background (`radar.py --minutes 30`) and read
-   its lines as they come; in Claude Code use the Monitor tool on it so every
-   HOT, WATCH, GRADUATED or BUNDLED line arrives as an event. In the Claude
-   app a push notification can go to the user's phone for a HOT line.
-2. For a HOT or WATCH coin: say why, in one line, and that it is still on the
-   bonding curve (no LP, no holder data). Only on the user's signal go on:
-   `/meme-analyst MINT --write`, `/meme-entry`, `/meme-exit`, and the rest of
-   the chain. meme-risk wants a pool at least `min_pool_age_hours` old, so a
-   coin this young is blocked unless the user lowers that limit themselves.
-3. For a GRADUATED coin: it now has a real pool. `/meme-analyst MINT` is the
+1. In a session, run it in the background (`radar.py --minutes 60 --quiet`)
+   and use the Monitor tool on it so every BUY, PAPER, GRADUATED or BUNDLED
+   line arrives as an event. Send a push notification for a BUY line while
+   the user is away.
+2. For a BUY line: say it is a paper signal, the coin's full contract
+   address, and why it passed, in one line. Nothing is bought.
+3. For a PAPER line: read back the result after costs and the running total.
+4. `radar.py test` when the user asks how it is going: read the lines as
+   printed. Under 50 closed signals, never call it a pattern.
+5. For a GRADUATED coin: it now has a real pool. `/meme-analyst MINT` is the
    next step.
-4. Say the counts at the end (new, flagged, checked, HOT, WATCH, graduated,
-   bundled). Most minutes have no HOT coin. That is normal.
+6. Say the counts at the end. Most minutes have no BUY. That is normal.
 
-## Example: a real recording
+## Real money
 
-Sunday 2026-11-01, 23:09 to 23:15 Europe/Berlin
-(`tests/fixtures/meme-radar/radar-2026-11-01-2309.json.gz`):
+While the paper test is running, or after it FAILED, no real money goes into
+these signals: say so plainly when the user asks. meme-risk blocks fresh
+coins today (its pool age, liquidity and analyst rules are made for coins
+hours old), and the pack never lowers those limits on its own. Real orders
+on fresh coins need their own path through meme-risk (at most
+`fresh_max_order_eur` a trade, the daily loss limit, the losing-streak
+pause), and that path is built only after the paper test PASSED and the
+user asks for it. Even then each order needs the user's explicit yes and is
+bought by the user in their own app.
+
+## Example: two real recordings
+
+Monday 2026-11-02, 07:19 to 07:23 Europe/Berlin, `radar.py --minutes 4
+--save` (`tests/fixtures/meme-radar/radar-2026-11-02-0719.json.gz`; the
+replay gives the same verdicts as the live run):
 
 ```
-BUNDLED   23:10:04  HV4fcGzFKLBV5Q8fKsgvedKHu7K3XpEZc7pgpgxVpump  graduated 0.2 s after launch: the whole bonding curve was bought in a few transactions, so insiders hold most of it. Stay away.
-GRADUATED 23:11:53  Bv9xDKiQzZMwPw7rCzog2dEYuZp3wBGaoK4DacC7pump  -> pump-amm pool. Now it has real liquidity: /meme-analyst Bv9xDKiQzZMwPw7rCzog2dEYuZp3wBGaoK4DacC7pump
-WATCH 23:13:08  COVERED (GeLShjLo8XV2iR1pvky4h9F2RzFKq4aDKVmKCNTZpump)  93s old: 166 buys vs 81 sells in 5 minutes; $11.3k volume in 5 minutes; no website, X or Telegram in its metadata; mcap $8.7k, 5m +208%, dev bought 3.4%
-Radar, 6 minutes: 58 new coins, 26 flagged at birth, 27 checked after 90s, 0 HOT, 2 to watch, 1 graduated, 1 bundled launches.
+SKIP  07:19:47  OKCAT (BFdQeGDHWqkQRCV1Zy78t99EEPhBA3CFE8wK4m72759s)  0s: copy race: OKCAT was already launched 1 time since the radar started
+BUY   07:20:12  OKCAT (gZRR9VtuyZDdQkUDKCEoheEHUxzps4Zg2Z7RB3Jpump)  30s: 19 traders; 15 holders; $1.3k bought; 19 buys vs 6 sells; the dev's coin no. 3; price $0.000005025, mcap $5.0k
+      paper test, signal 1 of 50: 5 EUR ($5.59 = 0.0592 SOL) as if bought 45 s from now; stop -25 %, target +50 %, out after 10 minutes; costs about 4.8 % a round trip. Still on the bonding curve.
+SKIP  07:20:30  CI (Gg29Wfhq2nRNziL32wCLEXDdWQ5amuJQC2yH1Qm218iY)  10s: the dev has launched 171 coins (0 graduated): a serial launcher
+SKIP  07:22:38  Mayhem (6fJ9Xi7eDS4WoM5AC4rgUvwMwP4tfnvpy8PzKhPKpump)  10s: Mayhem mode: pump.fun's AI agent trades it for its first 24 hours, so its buys are partly that bot; the dev has launched 51 coins (0 graduated): a serial launcher
+BUNDLED   07:23:03  EpwR7NhYigWiGQ7PWKscrAbf9pENT9dvbBKaiy7tpump  graduated 0.5 s after launch: the whole bonding curve was bought in a few transactions, so insiders hold most of it. Stay away.
+Radar, 4 minutes: 20 new coins: 3 BUY, 16 SKIP (6 at birth, 6 at 10s, 4 at 30s, 0 without data), 0 graduated, 1 bundled launch.
 ```
 
-58 new coins in 6 minutes. One wallet launched the same "Hyperhold" ticker
-ten times in a row; a coin called FOMO was created and graduated 0.2
-seconds later. No coin passed every check.
+45 seconds after its signal OKCAT was already 33 % lower; another BUY of
+those minutes, HODL, was 56 % higher. That is why the paper test fills at
+the price 45 s later, not at the signal.
+
+The twelve minutes before (07:07 to 07:19,
+`radar-2026-11-02-0707.json.gz`, every coin followed for 15 minutes): 74 new
+coins, 0 BUY. 37 were out at birth, 22 at 10 seconds (20 from devs with
+dozens of earlier coins, 7 in Mayhem mode), 12 at 30 seconds. Of the 58
+coins with a price 75 s and 11 minutes after their launch, 8 were up.
 
 ## Rules
 
-- A HOT line is a coin that passed a few checks, never a buy signal.
+- A BUY line is a coin that passed these rules, never a promise. Most new coins go to zero.
 - Always give the full contract address, never only the ticker: the copies share it.
-- Say that the coin is still on the bonding curve, with no LP and no holder data.
-- Never place, size or schedule a buy from the radar. The user decides, then the normal chain runs.
+- Say that the coin is still on the bonding curve.
+- Never place, size or schedule a buy from the radar. The paper test counts; the user decides.
 
 ## What it never does
 
-It never buys or sells, never signs anything, never uses a paid stream, and
-never calls a launch safe.
+It never buys or sells, never signs anything, never uses a paid stream,
+never changes the rules to make the test pass, and never calls a launch
+safe.
 
 ## Safety
 

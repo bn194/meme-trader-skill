@@ -4,7 +4,7 @@
 
 13 Claude-Skills für Meme Coins (Solana zuerst, also das, was du in Phantom,
 Jupiter oder Fomo handelst):
-- **Finden:** Der Scanner zeigt die Coins, die gerade laufen, sortiert danach, ob die Regel bei ihnen früher funktioniert hat. Der Radar sieht jeden neuen pump.fun-Coin in der ersten Sekunde.
+- **Finden:** Der Scanner zeigt die Coins, die gerade laufen, sortiert danach, ob die Regel bei ihnen früher funktioniert hat. Der Radar sieht jeden neuen pump.fun-Coin in der ersten Sekunde und sagt nach 30 Sekunden KAUFEN oder NICHT KAUFEN, zuerst im Papier-Test.
 - **Prüfen:** Der Analyst sucht vor jedem Kauf nach Rug-Fallen, mit RugCheck und GoPlus.
 - **Planen:** Der Entry-Timer sagt, wann der Ausbruch wirklich da ist. Der Exit-Planer setzt Stop, Ziel und Zeitstopp vorher und rechnet die Gebühren deiner App ein.
 - **Testen:** Die Time Machine spielt die nächste Stunde 10.000 Mal durch, testet die Regel auf vielen Coins und rechnet aus, wie wahrscheinlich dein Konto sich halbiert.
@@ -94,7 +94,7 @@ Zwei Dinge dazu:
 | Befehl | Rolle | was er macht |
 | --- | --- | --- |
 | `/meme-scanner` | Coin Scanner | Findet die Coins, die gerade gehandelt werden, filtert dünne, junge und gewaschene raus, meldet Setups und 1-Minuten-Ausbrüche, sortiert nach Edge. |
-| `/meme-radar` | Launch Radar | Sieht jeden neuen pump.fun-Coin in der ersten Sekunde, sortiert Fallen sofort aus, prüft nach 90 s erneut, meldet Graduierungen und gebündelte Insider-Launches. |
+| `/meme-radar` | Launch Radar | Sieht jeden neuen pump.fun-Coin in der ersten Sekunde, sortiert Fallen sofort aus, prüft nach 10 s den Dev und die Holder, sagt nach 30 s BUY oder SKIP, verfolgt jedes BUY als 5-€-Papier-Trade mit realistischer Verzögerung und Gebühren, meldet Graduierungen und gebündelte Insider-Launches. |
 | `/meme-analyst` | Token Analyst (Rug-Check) | Mint und Freeze, LP gelockt oder verbrannt, Top-Holder, Dev-Bag, Insider, Bundles über viele gleich große Wallets, gelockter Supply, Holder-Verlauf; GoPlus auch für Base und BSC: PASS, CAUTION oder AVOID. |
 | `/meme-news` | News Monitor | Krypto-Schlagzeilen, öffentliche Telegram-Kanäle, bezahlte Boosts, Community Takeovers, Rug-Warnung bei abfließender Liquidität. |
 | `/meme-entry` | Entry Timer | Beobachtet einen Coin Kerze für Kerze und sagt dir den Moment zum Einstieg. |
@@ -124,6 +124,7 @@ dazu.
 | Coin-Filter | Liquidität ≥ 50.000 $, Pool ≥ 6 h alt, Top-10 ≤ 30 %, Dev ≤ 5 %, Insider ≤ 15 %, LP ≥ 90 % gesperrt |
 | Edge-Prüfung | an: Setups, die in der Time Machine nach Gebühren verlieren, werden blockiert |
 | App | Phantom (0,85 %); Profile für Jupiter (≈ 0,1 %) und Fomo (0,5 %, mind. 0,95 $) |
+| Frische Coins (Radar) | 5 € pro Signal, erst als Papier-Test: 50 Signale, Kauf 45 s nach dem Signal, Stop −25 %, Ziel +50 %, raus nach 10 Minuten, pump.fun-Gebühr 1,25 % pro Seite |
 
 Fomos Mindestgebühr macht kleine Trades teuer. Derselbe 33-$-Trade kostet an
 einem Beispiel bei Jupiter 0,60 $, bei Phantom 1,08 $ und bei Fomo 2,43 $
@@ -176,11 +177,11 @@ abends, Uhrzeiten in Europe/Berlin, mit den 100-€-Einstellungen.
     - Ein Trade beweist nichts. Die 32 davor lagen nach Kosten bei −0,42R im Schnitt, und genau darauf schaut die Prüfung.
 11. **`/meme-journal`** zählt jeden echten Trade nach Gebühren. Nach 20 Trades sagt es "bestanden" oder "durchgefallen". Erst dann darf die Größe steigen.
 
-Und der Radar, 23:09 bis 23:15 am selben Abend:
-- 58 neue Coins in 6 Minuten, 26 sofort aussortiert.
-- Eine Wallet hat zehnmal hintereinander denselben Ticker gestartet.
-- Ein Coin namens "FOMO" war 0,2 Sekunden nach dem Start schon graduiert: Insider hatten die ganze Kurve aufgekauft (BUNDLED).
-- Kein Coin hat alle Prüfungen bestanden.
+Und der Radar am Montagmorgen, 2. November 2026:
+- 07:19 bis 07:23: 20 neue Coins, jeder hatte nach spätestens 30 Sekunden sein Urteil. 3-mal BUY (als Papier-Trade), 16-mal SKIP, ein gebündelter Launch.
+- Ein Entwickler hatte vorher schon 171 Coins gestartet, ein anderer 191: sofort SKIP.
+- 45 Sekunden nach seinem Signal stand OKCAT schon 33 % tiefer, HODL 56 % höher. Deshalb kauft der Papier-Test erst 45 Sekunden nach dem Signal, so lange wie du am Handy brauchst.
+- 07:07 bis 07:19: 74 neue Coins, kein einziges BUY. Von 58 Coins, die sich verfolgen ließen, lagen 11 Minuten nach dem Start nur 8 im Plus.
 
 ## Woher die Daten kommen
 
@@ -188,7 +189,7 @@ Und der Radar, 23:09 bis 23:15 am selben Abend:
 | --- | --- | --- |
 | DexScreener API | Boosts, Profile, Takeovers, Ads; Preis, Liquidität, Volumen, Käufe/Verkäufe | ja, frei |
 | GeckoTerminal | Trending und neue Pools; Kerzen für andere Chains | ja, frei, 30/min |
-| Jupiter `datapi` | 1-Minuten-Kerzen per Mint (Solana) | **inoffiziell** |
+| Jupiter `datapi` | 1-Minuten-Kerzen per Mint (Solana); Token-Daten frischer Coins (Dev, Holder, Sniper, erste Trades) für den Radar | **inoffiziell** |
 | Jupiter `lite-api` | SOL- und EUR-Kurs (EURC), Swap-Quotes zum Messen der echten Kosten (nur lesend) | ja, frei |
 | PumpPortal Websocket | jeder neue pump.fun-Coin und jede Graduierung | Drittanbieter, frei (Trade-Streams kosten, nicht genutzt) |
 | RugCheck | Token-Bericht Solana | ja, frei |
@@ -205,7 +206,8 @@ pro gelesenem Post, und Scrapen verstößt gegen die Regeln.
 ```bash
 python3 meme-scanner/scan.py pairs                                  # Pool-Statistiken, Setups
 python3 meme-scanner/scan.py range --edge                           # 1-Minuten-Ausbrüche, nach Edge sortiert
-python3 meme-radar/radar.py --minutes 30                            # neue pump.fun-Coins live
+python3 meme-radar/radar.py --minutes 30 --quiet                    # neue pump.fun-Coins live: BUY oder SKIP
+python3 meme-radar/radar.py test                                    # der Papier-Test bisher
 python3 meme-analyst/report.py MINT --write                         # Rug-Check -> meme/safety.json
 python3 meme-news/news.py --tokens MINT --telegram pumpfun          # Schlagzeilen, Telegram, Liquidität
 python3 meme-entry/entry.py check MINT --from 21:42                 # building / waiting / triggered
@@ -231,7 +233,7 @@ auf echten Daten jenes Abends:
 - Scan-Antworten, GATOs Kerzen und die Kerzen von 11 Coins
 - RugCheck-, GoPlus- und Jupiter-Antworten
 - News-Feeds, ein Telegram-Kanal
-- echte Wallet-Transaktionen und 6 Minuten Radar-Stream
+- echte Wallet-Transaktionen und 16 Minuten Radar-Stream mit Jupiter-Daten
 
 Sie reproduzieren jede Zahl oben.
 

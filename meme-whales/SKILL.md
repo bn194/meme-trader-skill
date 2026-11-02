@@ -85,7 +85,11 @@ leaderboards (Kolscan, GMGN, Cielo and others) show wallet addresses; the
 user copies the ones they want into a text file and imports it. A single
 wallet's buy says little (they often hold several wallets and sell into the
 people who follow them). Two or more of your wallets buying the same coin
-within 30 minutes is a stronger fact, so `check` puts a CLUSTER line on top:
+within 30 minutes is a stronger fact, so `check` puts a CLUSTER line on top.
+In a Claude session, Claude can look up such leaderboards on the web
+(WebSearch, WebFetch), show the user the wallets with what the page claims
+about them, and import only the ones the user picks: a leaderboard's profit
+figures are the site's claims, not verified results.
 
 ```
 CLUSTER: 2 of your wallets bought MEME within 10 minutes (a, b): MINT

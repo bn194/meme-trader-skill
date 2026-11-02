@@ -9,7 +9,8 @@ description: >-
   and each coin's move and pool liquidity compared with your last check, so a
   pool that is draining shows up as a rug warning, plus the public Telegram
   channels you follow (which coins they name, which contract addresses they
-  post most). X is not read: its API is paid per post. Shows only what is new
+  post most), and in a Claude session a web search for the coin (public X
+  posts that search engines show, Reddit, articles). Shows only what is new
   since the last check, newest first, in your time zone, tags each item and
   never repeats one. Use when the user says "any news on this coin", "why is
   it pumping", "why is it dumping", "what's happening in crypto", "morning
@@ -66,6 +67,26 @@ a mention is a fact, never a reason to buy. X (Twitter) is not read: its
 official API costs about $0.005 per post read since 2026, and scraping it
 breaks its rules.
 
+## The web (in a Claude session)
+
+The tool reads feeds; Claude can also search the web. For a coin the user is
+about to trade or holds, run a web search (the WebSearch tool, and WebFetch
+for a page it finds) for its contract address, `$TICKER` and name, plus
+`TICKER rug` and `TICKER dev sold`. Report in a few lines:
+
+- what people say and where (X posts that search engines show, Reddit,
+  Telegram previews, articles), with the date of each and a link;
+- warnings: rug or scam reports, a dev or team selling, a contract
+  exploit, an exchange halting it;
+- who is pushing it: paid promotion, influencer calls, a "community
+  takeover".
+
+Search results lag and miss most of X; a coin can be all over X and absent
+from search. Never quote a post as proof of anything, never treat hype as
+demand, and say plainly when nothing was found. Calls by influencers are
+often paid or their own bags being sold. This is context for the user's
+decision, not a signal.
+
 ## How it matches and tags
 
 A headline belongs to a coin when it names the ticker as a word (`GATO` or
@@ -121,8 +142,8 @@ because every coin trades in that weather.
 ## What it never does
 
 It never buys or sells, never predicts a price, never logs in anywhere,
-never reads X, never reads a private Telegram group, and never calls a
-headline or a call a reason to trade.
+never calls X's paid API or scrapes X, never reads a private Telegram group,
+and never calls a headline, a post or a call a reason to trade.
 
 ## Safety
 

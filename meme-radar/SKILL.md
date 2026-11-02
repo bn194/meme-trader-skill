@@ -173,6 +173,25 @@ coins, 0 BUY. 37 were out at birth, 22 at 10 seconds (20 from devs with
 dozens of earlier coins, 7 in Mayhem mode), 12 at 30 seconds. Of the 58
 coins with a price 75 s and 11 minutes after their launch, 8 were up.
 
+## The first paper test: FAILED
+
+Monday 2026-11-02, 07:25 to 18:50 Europe/Berlin, six runs of `radar.py
+--minutes 115 --quiet` with the default rules: about 7,200 new coins, 50
+BUY signals, 5 EUR each.
+
+```
+Paper test: 50 of 50 signals closed (0 still running): 13 won, 37 lost, 26 % win rate
+  after costs: average -12.5 % a trade, best +85.1 %, worst -86.9 %; total -31.32 EUR on 5-euro trades; profit factor 0.53
+  exits: stop 25, target 11, time 14
+  FAILED: after costs this rule lost money on paper over 50 signals. Do not trade it with real money.
+```
+
+The 25 stops were planned at -25 % and filled at -48 % on average: a fresh
+coin that turns keeps falling in the 45 seconds a human needs to sell. The
+11 targets made +58 % on average, the 14 time stops -4 %. Say this result
+when the user asks about trading fresh coins; a different rule needs its
+own new test of 50 signals, decided before it starts.
+
 ## Rules
 
 - A BUY line is a coin that passed these rules, never a promise. Most new coins go to zero.

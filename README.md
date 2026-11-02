@@ -37,6 +37,15 @@ pro Trade nach Gebühren**. Mit deinen Einstellungen fällt das Konto in 96 von
 Risk-Manager solche Trades, und genau deshalb beginnt echtes Geld mit einer
 Testphase.
 
+Auch der Schnell-Modus des Radars für ganz frische Coins hat seinen Test
+nicht bestanden. Am 2. November 2026 lief er von 07:25 bis 18:50 Uhr als
+Papier-Test: rund 7.200 neue Coins, 50 KAUFEN-Signale, je 5 €, gekauft und
+verkauft jeweils 45 Sekunden nach dem Signal (so lange braucht man am Handy).
+Ergebnis: 13 Gewinner, 37 Verlierer, nach Gebühren **−31,32 €, also −12,5 %
+pro Trade**. 25-mal griff der Stop. Geplant waren −25 %, im Schnitt wurden es
+−48 %, weil frische Coins in diesen 45 Sekunden weiterfallen. Urteil:
+DURCHGEFALLEN. Mit echtem Geld nicht handeln.
+
 Was das Paket kann:
 - Risiko klein und vorher bekannt machen.
 - Fallen aussortieren.
